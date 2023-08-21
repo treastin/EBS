@@ -1,19 +1,25 @@
-from apps.tasks.models import Task, Comment
+from django.db.models import Sum
+from apps.tasks.models import Task, Comment, Timelog
 from rest_framework import serializers
 
 
 class TaskSerializer(serializers.ModelSerializer):
-    task_id = serializers.ReadOnlyField(source='get_pk', )
+    id = serializers.ReadOnlyField()
+    time_passed = serializers.SerializerMethodField()
+
+    def get_time_passed(self, task):
+        time_passed = task.timelog_set.aggregate(total=Sum('duration')).get('total')
+        return time_passed or 0
 
     class Meta:
         model = Task
         fields = [
             'id',
-            "task_id",
             "title",
             "description",
             "status",
             "owner",
+            "time_passed",
         ]
 
 
@@ -81,4 +87,35 @@ class SearchTaskSerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'title'
+        ]
+
+
+class StartTimerSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Timelog
+        fields = [
+            'id',
+            'task',
+        ]
+
+
+class TimerSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Timelog
+        fields = '__all__'
+
+class Top20Serializer(serializers.ModelSerializer):
+    id = serializers.ReadOnlyField()
+    time_passed = serializers.SerializerMethodField()
+
+    def get_time_passed(self, task):
+        time_passed = task.timelog_set.aggregate(total=Sum('duration')).get('total')
+        return time_passed or 0
+
+    class Meta:
+        model = Task
+        fields = [
+            'id',
+            "title",
+            "time_passed",
         ]

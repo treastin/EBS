@@ -1,10 +1,11 @@
 import http
 
+from django.db.models import Sum
 from django.views.generic import DeleteView
 from rest_framework.viewsets import ModelViewSet
 from rest_framework import serializers
 
-from apps.tasks.models import Task, Comment
+from apps.tasks.models import Task, Comment, Timelog
 from drf_util.decorators import serialize_decorator
 from rest_framework.generics import GenericAPIView
 
@@ -13,9 +14,15 @@ from rest_framework.response import Response
 
 from apps.common.helpers import send_mail
 from apps.common.gmail import send_gmail
+from django.utils import timezone
+
+from datetime import timedelta, datetime
+
+from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned
 
 from apps.tasks.serializers import TaskSerializer, NewTaskSerializer, MyTaskSerializer, TaskByidSerializer, \
-    CommentSerializer, CommentByIdSerializer, TaskChangeSerializer, SearchTaskSerializer
+    CommentSerializer, CommentByIdSerializer, TaskChangeSerializer, SearchTaskSerializer, StartTimerSerializer, \
+    TimerSerializer, Top20Serializer
 
 
 # Create your views here.
@@ -208,3 +215,116 @@ class SearchTaskView(GenericAPIView):
         tasks_data = TaskSerializer(tasks, many=True).data
 
         return Response(tasks_data, status=http.HTTPStatus.OK)
+
+
+class StartTimelogView(GenericAPIView):
+    permission_classes = (IsAuthenticated,)
+    serializer_class = StartTimerSerializer
+
+    timelog = Timelog.objects.all()
+
+    @serialize_decorator(StartTimerSerializer)
+    def post(self, request):
+        validate_data = request.serializer.validated_data
+
+        latest_timelog_q = self.timelog.filter(task=validate_data['task'], duration__isnull=True).exists()
+
+        if latest_timelog_q:
+            return Response({'details': 'This task is currently ongoing. '}, status=http.HTTPStatus.BAD_REQUEST)
+        else:
+            Timelog.objects.create(**validate_data).save()
+            return Response({'details': 'Timelog started.'}, status=http.HTTPStatus.CREATED)
+
+
+class StopTimelogView(GenericAPIView):
+    permission_classes = (IsAuthenticated,)
+    serializer_class = StartTimerSerializer
+
+    timelog = Timelog.objects.all()
+
+    @serialize_decorator(StartTimerSerializer)
+    def post(self, request):
+        validate_data = request.serializer.validated_data
+
+        task = validate_data['task']
+
+        latest_timelog_q = self.timelog.filter(task=task, duration__isnull=True)
+
+        try:
+            latest_timelog = latest_timelog_q.get()
+
+        except MultipleObjectsReturned:
+            return Response({'details': 'The task has more than 1 ongoing timelog.'},status=http.HTTPStatus.MULTIPLE_CHOICES)
+
+        except ObjectDoesNotExist:
+            return Response({'details': 'The task has no ongoing timelog.'}, status=http.HTTPStatus.BAD_REQUEST)
+
+        duration = int((timezone.now() - latest_timelog.start).total_seconds() // 60)
+
+        latest_timelog_q.update(duration=duration)
+
+        return Response({'details': f'The duration of the task is {duration} minutes.'}, 200)
+
+
+class SetTimelogView(GenericAPIView):
+    permission_classes = (IsAuthenticated,)
+    serializer_class = TimerSerializer
+
+    timelog = Timelog.objects.all()
+
+    @serialize_decorator(TimerSerializer)
+    def post(self, request):
+        validate_data = request.serializer.validated_data
+
+        Timelog.objects.create(**validate_data).save()
+        return Response({'details': 'Timelog registered.'}, status=http.HTTPStatus.CREATED)
+
+
+class GetTimelogView(GenericAPIView):
+    permission_classes = (IsAuthenticated,)
+    serializer_class = TaskByidSerializer
+
+    @serialize_decorator(TaskByidSerializer)
+    def post(self, request):
+        validated_data = request.serializer.validated_data
+        tasks = TimerSerializer(Timelog.objects.all().filter(task=validated_data['id']), many=True)
+        return Response(data=tasks.data, status=http.HTTPStatus.OK)
+
+
+class GetMyTimelogView(GenericAPIView):
+    permission_classes = (IsAuthenticated,)
+    serializer_class = serializers.Serializer
+
+
+    def get(self, request):
+        last_day_of_last_month = datetime.now().replace(day=1) - timedelta(days=1)
+        first_day_of_last_month = last_day_of_last_month.replace(day=1)
+        difference_in_min = int((last_day_of_last_month - first_day_of_last_month).total_seconds() // 60 )
+
+        tasks_by_user = (Task.objects.filter(
+            owner=self.request.user,
+            timelog__start__gte=first_day_of_last_month,
+            timelog__start__lte=last_day_of_last_month
+        ))
+
+        total = tasks_by_user.aggregate(total=Sum('timelog__duration')).get('total')
+
+        response = {'total_time': total}
+        return Response(response)
+
+
+class GetTop20View(GenericAPIView):
+    permission_classes = (IsAuthenticated,)
+    serializer_class = serializers.Serializer
+
+    def get(self, request):
+
+        last_day_of_last_month = datetime.now().replace(day=1) - timedelta(days=1)
+        tasks = (Task.objects
+                 .filter(timelog__start__gte=last_day_of_last_month)
+                 .annotate(time=Sum('timelog__duration'))
+                 .order_by('-time')
+                 )
+
+        tasks_data = Top20Serializer(tasks, many=True).data
+        return Response(tasks_data)
