@@ -1,5 +1,3 @@
-from django.conf.urls import url
-
 from apps.tasks.views import TaskViewSet, CommentViewSet, TimelogViewSet
 
 from rest_framework.routers import DefaultRouter

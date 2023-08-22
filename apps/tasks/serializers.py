@@ -16,7 +16,6 @@ class TaskSerializer(serializers.ModelSerializer):
 
 
 class TaskListSerializer(serializers.Serializer):
-    id = serializers.ReadOnlyField()
     time_passed = serializers.SerializerMethodField()
 
     def get_time_passed(self, task):
@@ -30,16 +29,20 @@ class TaskListSerializer(serializers.Serializer):
             'title',
             'time_passed',
         ]
+        read_only_fields = [
+            'id',
+        ]
 
 
 class TaskUpdateSerializer(serializers.ModelSerializer):
-    created_by = serializers.ReadOnlyField()
-    status = serializers.ReadOnlyField()
-    assigned_to = serializers.ReadOnlyField()
-
     class Meta:
         model = Task
         fields = '__all__'
+        read_only_fields = [
+            'created_by',
+            'status',
+            'assigned_to',
+        ]
 
 
 class TaskAssignSerializer(serializers.ModelSerializer):
@@ -55,13 +58,14 @@ class TaskAssignSerializer(serializers.ModelSerializer):
 
 
 class MyTaskSerializer(serializers.ModelSerializer):
-    id = serializers.ReadOnlyField()
-
     class Meta:
         model = Task
         fields = [
             'id',
             'title',
+        ]
+        read_only_fields = [
+            'id',
         ]
 
 
@@ -99,7 +103,6 @@ class TimerSerializer(serializers.ModelSerializer):
 
 
 class Top20Serializer(serializers.ModelSerializer):
-    id = serializers.ReadOnlyField()
     time_passed = serializers.SerializerMethodField()
 
     def get_time_passed(self, task):
@@ -113,13 +116,17 @@ class Top20Serializer(serializers.ModelSerializer):
             "title",
             "time_passed",
         ]
+        read_only_fields = [
+            'id',
+        ]
 
 
 class TimelogSerializer(serializers.ModelSerializer):
-    created_by = serializers.ReadOnlyField()
-    status = serializers.ReadOnlyField()
-    assigned_to = serializers.ReadOnlyField()
-
     class Meta:
         model = Timelog
         fields = '__all__'
+        read_only_fields = [
+            'created_by',
+            'status',
+            'assigned_to',
+        ]

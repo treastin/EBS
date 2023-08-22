@@ -1,23 +1,21 @@
 import http
 
-from django.db.models import Sum
 from rest_framework.decorators import action
 from rest_framework.serializers import Serializer
 from rest_framework.filters import SearchFilter
-
-from apps.tasks.models import Task, Comment, Timelog
-from rest_framework.viewsets import ViewSet, ModelViewSet
-
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.viewsets import ModelViewSet
 
-from apps.common.helpers import send_mail
+from django.db.models import Sum
+from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned
 from django.utils import timezone
 
 from datetime import timedelta, datetime
 
-from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned
 
+from apps.common.helpers import send_mail
+from apps.tasks.models import Task, Comment, Timelog
 from apps.tasks.serializers import TaskListSerializer, TaskUpdateSerializer, \
     TaskSerializer, TaskAssignSerializer, CommentSerializer, SearchTaskSerializer,\
     Top20Serializer, MyTaskSerializer, TimelogSerializer

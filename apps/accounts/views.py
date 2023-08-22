@@ -1,27 +1,23 @@
 from rest_framework.decorators import action
 from rest_framework.viewsets import ModelViewSet
-
-from apps.accounts.models import User
-from drf_util.decorators import serialize_decorator
-from rest_framework.generics import GenericAPIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
-
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.accounts.serializers import UserSerializer, UserListSerializer
-
+from apps.accounts.models import User
 
 class UserViewSet(ModelViewSet):
     serializer_class = UserSerializer
     queryset = User.objects.all()
-    permission_classes = (AllowAny,)
+    permission_classes = (IsAuthenticated,)
+
 
     def list(self, request):
         users_data = UserListSerializer(User.objects.all(), many=True, ).data
         return Response(users_data)
 
-    @action(detail=False, methods=['POST'])
+    @action(detail=False, methods=['POST'],permission_classes=(AllowAny,))
     def register(self, request):
         validated_data = self.request.data
 
