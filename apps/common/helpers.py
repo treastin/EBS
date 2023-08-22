@@ -2,7 +2,7 @@ from drf_yasg import openapi
 from drf_yasg.views import get_schema_view
 from rest_framework.permissions import AllowAny
 
-from django.core.mail import send_mail as mail_template
+from django.core.mail import send_mail
 
 schema_view = get_schema_view(
     openapi.Info(
@@ -15,14 +15,15 @@ schema_view = get_schema_view(
 )
 
 
-def send_mail(user, subject='Empty', message='Empty'):
-    if user is None:
-        return
+def send_mail(receivers, subject='Empty', message='Empty'):
+    try:
+        if receivers is None:
+            return
 
-    mail_template(
-        subject,
-        message,
-        'EBS.test@example.com',
-        [user],
-        fail_silently=True,
-    )
+        send_mail(
+            subject=subject,
+            message=message,
+            receivers=[*receivers],
+        )
+    except:
+        pass

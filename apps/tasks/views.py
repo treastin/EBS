@@ -1,260 +1,146 @@
 import http
 
 from django.db.models import Sum
-from django.views.generic import DeleteView
-from rest_framework.viewsets import ModelViewSet
-from rest_framework import serializers
+from rest_framework.decorators import action
+from rest_framework.serializers import Serializer
+from rest_framework.filters import SearchFilter
 
 from apps.tasks.models import Task, Comment, Timelog
-from drf_util.decorators import serialize_decorator
-from rest_framework.generics import GenericAPIView
+from rest_framework.viewsets import ViewSet, ModelViewSet
 
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.common.helpers import send_mail
-from apps.common.gmail import send_gmail
 from django.utils import timezone
 
 from datetime import timedelta, datetime
 
 from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned
 
-from apps.tasks.serializers import TaskSerializer, NewTaskSerializer, MyTaskSerializer, TaskByidSerializer, \
-    CommentSerializer, CommentByIdSerializer, TaskChangeSerializer, SearchTaskSerializer, StartTimerSerializer, \
-    TimerSerializer, Top20Serializer
+from apps.tasks.serializers import TaskListSerializer, TaskUpdateSerializer, \
+    TaskSerializer, TaskAssignSerializer, CommentSerializer, SearchTaskSerializer,\
+    Top20Serializer, MyTaskSerializer, TimelogSerializer
 
 
-# Create your views here.
-
-# Using ROUTER
-#
-# class TaskViewSet(ModelViewSet):
-#     serializer_class = TaskSerializer
-#     permission_classes = (IsAuthenticated,)
-#     queryset = Task.objects.all()
-#
-#     # def retrieve(self, request, pk=None, *args, **kwargs):
-#     #     task = Task.objects.filter(id=pk)
-#     #     task_data = TaskSerializer(task,).data
-#     #     task_data.update({'id': pk})
-#     #
-#     #     return Response(task_data)
-#     #
-#
-#     def perform_create(self, serializer):
-#         serializer.save(owner=self.request.user)
-
-class AllTasksView(GenericAPIView):
-    serializer_class = TaskSerializer
+class TaskViewSet(ModelViewSet):
+    serializer_class = TaskListSerializer
+    queryset = Task.objects.all()
     permission_classes = (IsAuthenticated,)
+    filter_backends = [SearchFilter]
+    search_fields = ['title',]
 
-    def get(self, request):
-        tasks = Task.objects.all()
-        tasks_data = TaskSerializer(tasks, many=True).data
+    def get_serializer_class(self):
 
-        return Response(tasks_data)
+        if self.action in ['update', 'partial_update']:
+            return TaskUpdateSerializer
 
+        if self.action in ['mytask', 'completed', 'complete']:
+            return Serializer
 
-class GetTasksView(GenericAPIView):
-    serializer_class = TaskByidSerializer
-    permission_classes = (IsAuthenticated,)
+        if self.action in ['assign']:
+            return TaskAssignSerializer
 
-    @serialize_decorator(TaskByidSerializer)
-    def post(self, request):
-        tasks = Task.objects.get(pk=self.request.data['id'])
-        tasks_data = TaskSerializer(tasks, ).data
+        if self.action in ['search']:
+            return SearchTaskSerializer
 
-        return Response(tasks_data)
+        if self.action in ['list']:
+            return TaskListSerializer
 
+        return TaskSerializer
 
-class NewTaskView(GenericAPIView):
-    serializer_class = NewTaskSerializer
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
 
-    permission_classes = (IsAuthenticated,)
+    @action(detail=True, methods=['POST'])
+    def complete(self, request, pk=None):
+        instance = self.get_object()
+        instance.status = 'completed'
+        instance.save()
+        send_mail(
+            receivers=instance.assigned_to.email,
+            subject="You have ben assigned a new task!",
+            message=f"You have ben assigned a new task!\n The new task is \"{instance.title}\".")
+        return Response(data={'details': 'Task completed'})
 
-    @serialize_decorator(NewTaskSerializer)
-    def post(self, request):
-        validated_data = request.serializer.validated_data
-
-        task = Task.objects.create(**validated_data, owner=self.request.user, status='In progress')
-        task.save()
-
-        response = {
-            'id': task.id
-        }
-
-        try:
-            send_mail(
-                user=task.owner.email,
-                subject="You have ben assigned a new task!",
-                message=f"You have ben assigned a new task!\n The new task is \"{task.title}\".")
-        except:
-            pass
-
-        return Response(response)
-
-
-class MyTaskView(GenericAPIView):
-    serializer_class = serializers.Serializer
-    permission_classes = (IsAuthenticated,)
-
-    # @serialize_decorator(MyTaskSerializer)
-    def get(self, request):
-        mytasks = Task.objects.filter(owner=self.request.user, )
+    @action(detail=False, serializer_class=Serializer)
+    def mytasks(self, request):
+        mytasks = Task.objects.filter(assigned_to=self.request.user, )
         mytasks_data = MyTaskSerializer(mytasks, many=True).data
+        return Response(data=mytasks_data)
 
-        return Response(mytasks_data)
-
-
-class CompletedTaskView(GenericAPIView):
-    serializer_class = serializers.Serializer
-    permission_classes = (IsAuthenticated,)
-
-    # @serialize_decorator(MyTaskSerializer)
-    def get(self, request):
-        completed_tasks = Task.objects.filter(status='Completed', )
-        completed_tasks_data = MyTaskSerializer(completed_tasks, many=True).data
-
+    @action(detail=False, serializer_class=Serializer)
+    def completed(self, request):
+        completed_tasks = Task.objects.filter(status='completed', )
+        completed_tasks_data = TaskSerializer(completed_tasks, many=True).data
         return Response(completed_tasks_data)
 
-
-class ChangeOwnerView(GenericAPIView):
-    permission_classes = (IsAuthenticated,)
-    serializer_class = TaskChangeSerializer
-
-    def post(self, request, ):
-        Task.objects.filter(pk=self.request.data['id']).update(owner=self.request.data['owner'])
-
+    @action(detail=False, methods=['PUT'],  serializer_class=TaskAssignSerializer)
+    def assign(self, request):
+        Task.objects.filter(pk=self.request.data['id']).update(assigned_to=self.request.data['assigned_to'])
         task = Task.objects.get(pk=self.request.data['id'])
-
-        try:
-            send_mail(
-                user=task.owner.email,
-                subject="You have ben assigned a new task!",
-                message=f"You have ben assigned a new task!\n The new task is \"{task.title}\".")
-        except Exception as e:
-            print(e)
-            pass
-
-        return Response({}, status=http.HTTPStatus.OK)
-
-
-class CompleteTaskView(GenericAPIView):
-    permission_classes = (IsAuthenticated,)
-    serializer_class = TaskByidSerializer
-
-    def post(self, request, ):
-        task_id = self.request.data['id']
-        Task.objects.filter(pk=task_id).update(status='Completed')
-
-        task = Task.objects.get(pk=self.request.data['id'])
-
         send_mail(
-            user=task.owner.email,
-            subject='Your task is now complete!',
-            message=f'The task \"{task.title}\" is completed.'
-        )
-
+            receivers=task.assigned_to.email,
+            subject="You have ben assigned a new task!",
+            message=f"You have ben assigned a new task!\n The new task is \"{task.title}\".")
         return Response({}, status=http.HTTPStatus.OK)
 
-
-class RemoveTaskView(GenericAPIView):
-    permission_classes = (IsAuthenticated,)
-    serializer_class = TaskByidSerializer
-
-    def post(self, request, ):
-        Task.objects.filter(pk=self.request.data['id']).delete()
-        return Response({}, status=http.HTTPStatus.OK)
+    @action(detail=True)
+    def timelog(self, request, pk=None):
+        tasks = TimelogSerializer(Timelog.objects.all().filter(task=pk), many=True)
+        return Response(data=tasks.data, status=http.HTTPStatus.OK)
 
 
-class NewCommnetView(GenericAPIView):
-    permission_classes = (IsAuthenticated,)
+class CommentViewSet(ModelViewSet):
     serializer_class = CommentSerializer
+    queryset = Comment.objects.all()
+    permission_classes = (IsAuthenticated,)
 
-    @serialize_decorator(CommentSerializer)
-    def post(self, request, ):
-        validated_data = request.serializer.validated_data
-
-        comment = Comment.objects.create(**validated_data)
-        comment.save()
-
-        task = Task.objects.get(pk=validated_data['task'].id)
-
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        headers = self.get_success_headers(serializer.data)
+        task = Task.objects.get(pk=serializer.data['task'])
         send_mail(
-            user=task.owner.email,
+            receivers=task.assigned_to.email,
             subject='Your task got a new comment!',
-            message=f'The task \"{task.title}\" got a new comment :\n {validated_data["text"]}'
+            message=f'The task \"{task.title}\" got a new comment :\n {serializer.data["text"]}'
         )
-        return Response({'id': comment.id}, status=http.HTTPStatus.CREATED)
+        return Response(serializer.data, status=201, headers=headers)
 
 
-class GetCommentsView(GenericAPIView):
+class TimelogViewSet(ModelViewSet):
+    serializer_class = TimelogSerializer
+    queryset = Timelog.objects.all()
     permission_classes = (IsAuthenticated,)
-    serializer_class = CommentByIdSerializer
 
-    @serialize_decorator(CommentByIdSerializer)
-    def post(self, request):
-        validate_data = request.serializer.validated_data
+    def get_serializer_class(self):
 
-        comments = Comment.objects.filter(**validate_data)
-        comments_data = CommentSerializer(comments, many=True).data
+        if self.action in ['set']:
+            return TimelogSerializer
 
-        return Response(comments_data, status=http.HTTPStatus.OK)
+        return TimelogSerializer
 
+    @action(detail=True, methods=['POST'])
+    def start(self, request, pk=None):
+        latest_timelog_exists = self.queryset.filter(task=pk, duration__isnull=True).exists()
 
-class SearchTaskView(GenericAPIView):
-    permission_classes = (IsAuthenticated,)
-    serializer_class = SearchTaskSerializer
-
-    @serialize_decorator(SearchTaskSerializer)
-    def post(self, request):
-        validate_data = request.serializer.validated_data
-
-        tasks = Task.objects.filter(title__contains=validate_data['title'])
-        tasks_data = TaskSerializer(tasks, many=True).data
-
-        return Response(tasks_data, status=http.HTTPStatus.OK)
-
-
-class StartTimelogView(GenericAPIView):
-    permission_classes = (IsAuthenticated,)
-    serializer_class = StartTimerSerializer
-
-    timelog = Timelog.objects.all()
-
-    @serialize_decorator(StartTimerSerializer)
-    def post(self, request):
-        validate_data = request.serializer.validated_data
-
-        latest_timelog_q = self.timelog.filter(task=validate_data['task'], duration__isnull=True).exists()
-
-        if latest_timelog_q:
+        if latest_timelog_exists:
             return Response({'details': 'This task is currently ongoing. '}, status=http.HTTPStatus.BAD_REQUEST)
         else:
-            Timelog.objects.create(**validate_data).save()
+            Timelog.objects.create(task_id=pk).save()
             return Response({'details': 'Timelog started.'}, status=http.HTTPStatus.CREATED)
 
-
-class StopTimelogView(GenericAPIView):
-    permission_classes = (IsAuthenticated,)
-    serializer_class = StartTimerSerializer
-
-    timelog = Timelog.objects.all()
-
-    @serialize_decorator(StartTimerSerializer)
-    def post(self, request):
-        validate_data = request.serializer.validated_data
-
-        task = validate_data['task']
-
-        latest_timelog_q = self.timelog.filter(task=task, duration__isnull=True)
+    @action(detail=True, methods=['POST'])
+    def stop(self, request, pk=None):
+        latest_timelog_q = self.queryset.filter(task=pk, duration__isnull=True)
 
         try:
             latest_timelog = latest_timelog_q.get()
-
         except MultipleObjectsReturned:
-            return Response({'details': 'The task has more than 1 ongoing timelog.'},status=http.HTTPStatus.MULTIPLE_CHOICES)
+            return Response({'details': 'The task has more than 1 ongoing timelog.'},
+                            status=http.HTTPStatus.MULTIPLE_CHOICES)
 
         except ObjectDoesNotExist:
             return Response({'details': 'The task has no ongoing timelog.'}, status=http.HTTPStatus.BAD_REQUEST)
@@ -265,60 +151,23 @@ class StopTimelogView(GenericAPIView):
 
         return Response({'details': f'The duration of the task is {duration} minutes.'}, 200)
 
-
-class SetTimelogView(GenericAPIView):
-    permission_classes = (IsAuthenticated,)
-    serializer_class = TimerSerializer
-
-    timelog = Timelog.objects.all()
-
-    @serialize_decorator(TimerSerializer)
-    def post(self, request):
-        validate_data = request.serializer.validated_data
-
-        Timelog.objects.create(**validate_data).save()
-        return Response({'details': 'Timelog registered.'}, status=http.HTTPStatus.CREATED)
-
-
-class GetTimelogView(GenericAPIView):
-    permission_classes = (IsAuthenticated,)
-    serializer_class = TaskByidSerializer
-
-    @serialize_decorator(TaskByidSerializer)
-    def post(self, request):
-        validated_data = request.serializer.validated_data
-        tasks = TimerSerializer(Timelog.objects.all().filter(task=validated_data['id']), many=True)
-        return Response(data=tasks.data, status=http.HTTPStatus.OK)
-
-
-class GetMyTimelogView(GenericAPIView):
-    permission_classes = (IsAuthenticated,)
-    serializer_class = serializers.Serializer
-
-
-    def get(self, request):
+    @action(detail=False)
+    def mytime(self, request):
         last_day_of_last_month = datetime.now().replace(day=1) - timedelta(days=1)
         first_day_of_last_month = last_day_of_last_month.replace(day=1)
-        difference_in_min = int((last_day_of_last_month - first_day_of_last_month).total_seconds() // 60 )
 
         tasks_by_user = (Task.objects.filter(
-            owner=self.request.user,
+            assigned_to=self.request.user,
             timelog__start__gte=first_day_of_last_month,
             timelog__start__lte=last_day_of_last_month
         ))
 
         total = tasks_by_user.aggregate(total=Sum('timelog__duration')).get('total')
 
-        response = {'total_time': total}
-        return Response(response)
+        return Response({'total_time': total})
 
-
-class GetTop20View(GenericAPIView):
-    permission_classes = (IsAuthenticated,)
-    serializer_class = serializers.Serializer
-
-    def get(self, request):
-
+    @action(detail=False)
+    def top20(self, response):
         last_day_of_last_month = datetime.now().replace(day=1) - timedelta(days=1)
         tasks = (Task.objects
                  .filter(timelog__start__gte=last_day_of_last_month)

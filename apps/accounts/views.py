@@ -1,7 +1,10 @@
-from apps.accounts.models import CustomUser
+from rest_framework.decorators import action
+from rest_framework.viewsets import ModelViewSet
+
+from apps.accounts.models import User
 from drf_util.decorators import serialize_decorator
 from rest_framework.generics import GenericAPIView
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -9,21 +12,24 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from apps.accounts.serializers import UserSerializer, UserListSerializer
 
 
-class RegisterUserView(GenericAPIView):
+class UserViewSet(ModelViewSet):
     serializer_class = UserSerializer
-
+    queryset = User.objects.all()
     permission_classes = (AllowAny,)
-    authentication_classes = ()
 
-    @serialize_decorator(UserSerializer)
-    def post(self, request):
-        validated_data = request.serializer.validated_data
+    def list(self, request):
+        users_data = UserListSerializer(User.objects.all(), many=True, ).data
+        return Response(users_data)
+
+    @action(detail=False, methods=['POST'])
+    def register(self, request):
+        validated_data = self.request.data
 
         # Get password from validated data
         password = validated_data.pop("password")
 
         # Create user
-        user = CustomUser.objects.create(
+        user = User.objects.create(
             **validated_data,
         )
 
@@ -39,22 +45,3 @@ class RegisterUserView(GenericAPIView):
         }
 
         return Response(response)
-
-
-# class RegisterGenericUserView(GenericAPIView):
-#     serializer_class = UserSerializer
-#     permission_classes = (AllowAny,)
-#
-#     def post(self, request):
-
-
-class UserListView(GenericAPIView):
-    serializer_class = UserSerializer
-
-    permission_classes = (AllowAny,)
-    authentication_classes = ()
-
-    def get(self, request):
-        users = CustomUser.objects.all()
-        users_data = UserListSerializer(users, many=True, ).data
-        return Response(users_data)

@@ -4,6 +4,18 @@ from rest_framework import serializers
 
 
 class TaskSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = Task
+        fields = '__all__'
+
+        read_only_fields = [
+            'id',
+            'created_by',
+        ]
+
+
+class TaskListSerializer(serializers.Serializer):
     id = serializers.ReadOnlyField()
     time_passed = serializers.SerializerMethodField()
 
@@ -15,51 +27,41 @@ class TaskSerializer(serializers.ModelSerializer):
         model = Task
         fields = [
             'id',
-            "title",
-            "description",
-            "status",
-            "owner",
-            "time_passed",
+            'title',
+            'time_passed',
         ]
 
 
-class NewTaskSerializer(serializers.ModelSerializer):
+class TaskUpdateSerializer(serializers.ModelSerializer):
+    created_by = serializers.ReadOnlyField()
+    status = serializers.ReadOnlyField()
+    assigned_to = serializers.ReadOnlyField()
+
     class Meta:
         model = Task
-        fields = [
-            'title',
-            'description',
-        ]
+        fields = '__all__'
+
+
+class TaskAssignSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField()
+    assigned_to = serializers.IntegerField()
+
+    class Meta:
+        model = Task
+        fields = (
+            'id',
+            'assigned_to'
+        )
 
 
 class MyTaskSerializer(serializers.ModelSerializer):
+    id = serializers.ReadOnlyField()
+
     class Meta:
         model = Task
         fields = [
             'id',
             'title',
-        ]
-
-
-class TaskChangeSerializer(serializers.ModelSerializer):
-    id = serializers.IntegerField()
-    owner = serializers.IntegerField()
-
-    class Meta:
-        model = Task
-        fields = [
-            'id',
-            'owner',
-        ]
-
-
-class TaskByidSerializer(serializers.ModelSerializer):
-    id = serializers.IntegerField()
-
-    class Meta:
-        model = Task
-        fields = [
-            'id',
         ]
 
 
@@ -73,19 +75,10 @@ class CommentSerializer(serializers.ModelSerializer):
         ]
 
 
-class CommentByIdSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Comment
-        fields = [
-            'task',
-        ]
-
-
 class SearchTaskSerializer(serializers.ModelSerializer):
     class Meta:
         model = Task
         fields = [
-            'id',
             'title'
         ]
 
@@ -104,6 +97,7 @@ class TimerSerializer(serializers.ModelSerializer):
         model = Timelog
         fields = '__all__'
 
+
 class Top20Serializer(serializers.ModelSerializer):
     id = serializers.ReadOnlyField()
     time_passed = serializers.SerializerMethodField()
@@ -119,3 +113,13 @@ class Top20Serializer(serializers.ModelSerializer):
             "title",
             "time_passed",
         ]
+
+
+class TimelogSerializer(serializers.ModelSerializer):
+    created_by = serializers.ReadOnlyField()
+    status = serializers.ReadOnlyField()
+    assigned_to = serializers.ReadOnlyField()
+
+    class Meta:
+        model = Timelog
+        fields = '__all__'
