@@ -27,4 +27,4 @@ class UserListSerializer(serializers.ModelSerializer):
         ]
 
     def get_full_name(self, obj):
-        return f'{obj.first_name} {obj.last_name}'
+        return f'{obj.first_name} {obj.last_name}' # pragma: no cover

@@ -26,21 +26,4 @@ class Migration(migrations.Migration):
                 ('owner', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='owner', to=settings.AUTH_USER_MODEL)),
             ],
         ),
-        migrations.CreateModel(
-            name='Timelog',
-            fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('start', models.DateTimeField(default=django.utils.timezone.now)),
-                ('duration', models.IntegerField(default=None, null=True)),
-                ('task', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='tasks.task')),
-            ],
-        ),
-        migrations.CreateModel(
-            name='Comment',
-            fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('text', models.CharField(max_length=255)),
-                ('task', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='tasks.task')),
-            ],
-        ),
     ]
