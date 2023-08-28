@@ -3,7 +3,6 @@ from rest_framework import serializers
 
 
 class UserSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True)
 
     class Meta:
         model = User
@@ -13,6 +12,7 @@ class UserSerializer(serializers.ModelSerializer):
             "email",
             "password",
         ]
+        extra = {"password": {"write_only": True}}
 
 
 class UserListSerializer(serializers.ModelSerializer):
@@ -23,8 +23,7 @@ class UserListSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "full_name",
-
         ]
 
     def get_full_name(self, obj):
-        return f'{obj.first_name} {obj.last_name}' # pragma: no cover
+        return f'{obj.first_name} {obj.last_name}'
