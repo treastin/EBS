@@ -87,18 +87,16 @@ class Timer(models.Model):
 
 @receiver(pre_save, sender=Task)
 def send_email(sender, instance, *args, **kwargs):
-    return
-
     if instance.task.status == 'completed':
-        send_mail(
-            recipient_list=instance.task.assigned_to.email,
-            subject="You have task is now complete!",
-            message=f"The task \"{instance.task.title}\"!"
-        )
+        mail_subject = "You have task is now complete!"
+        mail_message = f"The task \"{instance.task.title}\"!"
     else:
-        send_mail(
-            recipient_list=instance.task.assigned_to.email,
-            subject="You have ben assigned a new task!",
-            message=f"You have ben assigned a new task!\n The new task is \"{instance.task.title}\"."
-        )
+        mail_subject = "You have ben assigned a new task!",
+        mail_message = f"You have ben assigned a new task!\n The new task is \"{instance.task.title}\"."
+
+    send_mail(
+        recipient_list=instance.task.assigned_to.email,
+        subject=mail_subject,
+        message=mail_message
+    )
 

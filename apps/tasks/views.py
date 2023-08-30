@@ -1,6 +1,3 @@
-import http
-
-from rest_framework import status
 from django.core.mail import send_mail
 from rest_framework.decorators import action
 from rest_framework.serializers import Serializer
@@ -8,8 +5,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import ViewSet, mixins, GenericViewSet
 
-from django.db.models import Sum, Q
-from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned
+from django.db.models import Sum
+from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone
 
 from datetime import timedelta, datetime
@@ -40,7 +37,8 @@ class TaskViewSet(ViewSet,
         instance = self.get_object()
         instance.status = 'completed'
         instance.save()
-        return Response(data={'details': 'Task completed'})
+        serializer = self.get_serializer(instance=instance)
+        return Response(serializer.data)
 
     @action(detail=False, serializer_class=Serializer)
     def mytasks(self, request, *args, **kwargs):
@@ -69,7 +67,8 @@ class CommentViewSet(ViewSet,
     def perform_create(self, serializer):
         send_mail(
             subject="Your task has a new comment.",
-            message=f"Hi, {self.request.user.first_name}.\nThe task {serializer.validated_data['task'].title} has a new comment.",
+            message=f"Hi, {self.request.user.first_name}.\n"
+                    f"The task {serializer.validated_data['task'].title} has a new comment.",
             recipient_list=[*self.request.user.email],
             from_email=None
         )
