@@ -19,6 +19,7 @@ class Command(BaseCommand):
         fake = Faker()
         total = kwargs['instances']
         users_id = list(User.objects.values_list('id', flat=True))
+        statuses = ['to_do', 'in_progress', 'completed']
         if users_id:
             instances = []
             for i in range(total):
@@ -26,7 +27,8 @@ class Command(BaseCommand):
                     Task(title=fake.name(),
                          description=fake.text(),
                          assigned_to_id=random.choice(users_id),
-                         created_by_id=random.choice(users_id))
+                         created_by_id=random.choice(users_id),
+                         status=random.choice(statuses))
                 ]
                 )
             while True:

@@ -1,7 +1,6 @@
 ;; gitignore for Django using pyCharm
 .coverage
 
-
 ;;extensions to ignore
 *.log
 *.pot
@@ -12,3 +11,4 @@
 ;;directories to ignore
 .idea/
 htmlcov
+/venv/

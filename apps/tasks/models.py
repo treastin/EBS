@@ -14,7 +14,7 @@ from apps.accounts.models import User
 
 class TaskQuerySet(models.QuerySet):
     def with_total_duration(self):
-        return self.annotate(total_duration=(models.Sum('timelog_task__duration')))
+        return self.annotate(total_duration=(models.Sum('timelog_task__duration'))).order_by('-id')
 
 
 class Task(models.Model):
@@ -36,6 +36,9 @@ class Comment(models.Model):
     task = models.ForeignKey(Task, on_delete=models.CASCADE)
     text = models.TextField()
 
+    class Meta:
+        ordering = ['-id']
+
     def __str__(self):
         return f'{self.task.title} : {self.text}'
 
@@ -46,6 +49,9 @@ class TimeLog(models.Model):
     started_at = models.DateTimeField(default=timezone.now)
     duration = models.DurationField(default=datetime.timedelta(), null=True)
 
+    class Meta:
+        ordering = ['-id']
+
     def __str__(self):
         return f'Timelog of \"{self.task.title}\" id({self.id})'
 
@@ -55,6 +61,7 @@ class Timer(models.Model):
         unique_together = [
             ('user', 'task')
         ]
+        ordering = ['-id']
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='user_timer')
     task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name='task_timer')
@@ -87,16 +94,20 @@ class Timer(models.Model):
 
 @receiver(pre_save, sender=Task)
 def send_email(sender, instance, *args, **kwargs):
-    if instance.task.status == 'completed':
+    if instance.status == 'completed':
         mail_subject = "You have task is now complete!"
-        mail_message = f"The task \"{instance.task.title}\"!"
+        mail_message = f"The task \"{instance.title}\"!"
     else:
         mail_subject = "You have ben assigned a new task!",
-        mail_message = f"You have ben assigned a new task!\n The new task is \"{instance.task.title}\"."
+        mail_message = f"You have ben assigned a new task!\n The new task is \"{instance.title}\"."
 
-    send_mail(
-        recipient_list=instance.task.assigned_to.email,
-        subject=mail_subject,
-        message=mail_message
-    )
+    try:
+        send_mail(
+            recipient_list=[instance.assigned_to.email],
+            subject=mail_subject,
+            message=mail_message,
+            from_email=None
+        )
+    except:
+        return
 
