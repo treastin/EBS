@@ -1,11 +1,10 @@
-from django.db.models import Sum
+from datetime import timedelta
 from apps.tasks.models import Task, Comment, TimeLog, Timer
 from rest_framework import serializers
-from django.db.models import DurationField
 
 
 class TaskSerializer(serializers.ModelSerializer):
-    total_duration = serializers.DurationField(default=0)
+    total_duration = serializers.DurationField(default=timedelta(), read_only=True)
 
     class Meta:
         model = Task
@@ -35,7 +34,6 @@ class AssignSerializer(serializers.ModelSerializer):
         fields = [
             'assigned_to',
         ]
-
 
 
 class MyTaskSerializer(serializers.ModelSerializer):
@@ -76,7 +74,7 @@ class TimeLogSerializer(serializers.ModelSerializer):
 
 
 class Top20Serializer(serializers.ModelSerializer):
-    total_duration = serializers.DurationField(default=0)
+    total_duration = serializers.DurationField(default=0, read_only=True)
 
     class Meta:
         model = Task
@@ -88,7 +86,6 @@ class Top20Serializer(serializers.ModelSerializer):
         read_only_fields = [
             'id',
         ]
-
 
 
 class TimelogSerializer(serializers.ModelSerializer):

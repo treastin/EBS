@@ -58,7 +58,7 @@ class Timer(models.Model):
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='user_timer')
     task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name='task_timer')
-    started_at = models.DateTimeField(default=timezone.now)
+    started_at = models.DateTimeField(auto_now_add=True)
     is_started = models.BooleanField(default=False)
 
     def start(self):

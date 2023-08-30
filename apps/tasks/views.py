@@ -111,12 +111,10 @@ class TimelogViewSet(ViewSet,
         return Response(tasks_data)
 
 
-class TimerViewSet(ViewSet,
-                   GenericViewSet):
+class TimerViewSet(ViewSet, GenericViewSet):
     queryset = Timer.objects.all()
     serializer_class = TimerSerializer
     permission_classes = (IsAuthenticated,)
-    filterset_fields = ['']
 
     @action(detail=True, methods=['POST'], serializer_class=Serializer)
     def start(self, request, pk=None, *args, **kwargs):
@@ -126,7 +124,11 @@ class TimerViewSet(ViewSet,
 
     @action(detail=True, methods=['POST'], serializer_class=Serializer)
     def stop(self, request, pk=None, *args, **kwargs):
-        instance = self.queryset.get(user=self.request.user, task_id=pk)
+        try:
+            instance = self.queryset.get(user=self.request.user, task_id=pk)
+        except ObjectDoesNotExist:
+            return Response({'details': 'There is no ongoing timer.'}, status=400)
+
         difference = (timezone.now() - instance.started_at).total_seconds() // 60
         instance.stop()
         return Response(

@@ -7,4 +7,4 @@ drf-yasg==1.21.4
 drf-util==1.0.17
 psycopg2==2.9.7
 coverage==7.3.0
-
+Faker~=19.3.1
