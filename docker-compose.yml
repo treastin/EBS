@@ -1,0 +1,46 @@
+version: "2"
+services:
+  db:
+    image: postgres:latest
+    ports:
+      - "5432:5432"
+    networks:
+      django_net:
+    environment:
+      - POSTGRES_PASSWORD=ebs
+      - POSTGRES_USER=postgres
+      - POSTGRES_DB=db
+    container_name: postgres
+  web:
+    build: .
+    container_name: django
+    ports:
+     - "8000:8000"
+    networks:
+      django_net:
+    working_dir: /app/
+    depends_on:
+      - db
+#    command: 'bash /app/start.sh'
+  pghero:
+    image: ankane/pghero
+    ports:
+      - "8080:8080"
+    networks:
+      django_net:
+    container_name: pghero
+    depends_on:
+      - db
+    environment:
+      - DATABASE_URL=postgres://postgres:ebs@postgres:5432/db
+  redis:
+    image: redis:latest
+    container_name: redis
+    depends_on:
+      - db
+    ports:
+      - "6379:6379"
+    networks:
+      django_net:
+networks:
+  django_net:

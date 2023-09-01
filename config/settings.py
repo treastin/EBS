@@ -113,7 +113,7 @@ DATABASES = {
         "NAME": "db",
         "USER": "postgres",
         "PASSWORD": "ebs",
-        "HOST": "localhost",  # set in docker-compose.yml
+        "HOST": "postgres",  # set in docker-compose.yml
         "PORT": 5432,  # default postgres port
     }
 }
@@ -137,6 +137,22 @@ AUTH_PASSWORD_VALIDATORS = [
         'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
     },
 ]
+
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": "redis://redis:6379/1",
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        },
+        "KEY_PREFIX": "django"
+    }
+}
+
+SESSION_ENGINE = "django.contrib.sessions.backends.cache"
+SESSION_CACHE_ALIAS = "default"
+# Time for cache to refresh
+CACHE_TTL = 60
 
 # Internationalization
 # https://docs.djangoproject.com/en/3.2/topics/i18n/

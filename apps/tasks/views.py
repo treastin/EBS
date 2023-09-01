@@ -5,11 +5,15 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import ViewSet, mixins, GenericViewSet
 
+from django.utils.decorators import method_decorator
+from django.views.decorators.cache import cache_page
 from django.db.models import Sum
 from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone
 
 from datetime import timedelta, datetime
+
+from config.settings import CACHE_TTL
 
 from apps.tasks.models import Task, Comment, TimeLog, Timer
 from apps.tasks.serializers import AssignSerializer, TimerSerializer, \
@@ -98,11 +102,12 @@ class TimelogViewSet(ViewSet,
 
         return Response({'total_time': total})
 
+    @method_decorator(cache_page(CACHE_TTL))
     @action(detail=False)
     def top20(self, response, *args, **kwargs):
         this_month = datetime.now().replace(day=1).date()
         tasks = (Task.objects.with_total_duration()
-                 .filter(task_timer__started_at__gte=this_month)
+                 .filter(timelog_task__started_at__gte=this_month)
                  .filter(total_duration__isnull=False)
                  .order_by('-total_duration')[:20]
                  )
