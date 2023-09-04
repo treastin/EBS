@@ -32,10 +32,7 @@ class Command(BaseCommand):
                             duration=timedelta(minutes=random.randint(2, 1000)),)
                 ]
                 )
-            while True:
-                if not len(instances):
-                    break
-                TimeLog.objects.bulk_create(instances, total)
+            TimeLog.objects.bulk_create(instances, total)
         else:
             return self.stdout.write(self.style.ERROR(f'The database has no tasks to timelog.'))
 

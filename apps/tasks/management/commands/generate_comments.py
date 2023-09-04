@@ -27,10 +27,7 @@ class Command(BaseCommand):
                             text=fake.text())
                 ]
                 )
-            while True:
-                if not len(instances):
-                    break
-                Task.objects.bulk_create(instances, total)
+            Task.objects.bulk_create(instances, total)
         else:
             return self.stdout.write(self.style.ERROR(f'The database has no tasks to comment.'))
 
