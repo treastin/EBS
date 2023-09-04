@@ -10,16 +10,7 @@ from rest_framework.exceptions import ValidationError
 from apps.accounts.models import User
 
 
-# Create your models here.
-
-class TaskQuerySet(models.QuerySet):
-    def with_total_duration(self):
-        return self.annotate(total_duration=(models.Sum('timelog_task__duration'))).order_by('-id')
-
-
 class Task(models.Model):
-    objects = TaskQuerySet.as_manager()
-
     class Status(models.TextChoices):
         TODO = 'to_do'
         IN_PROGRESS = 'in_progress'

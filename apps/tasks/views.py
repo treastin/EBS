@@ -35,7 +35,7 @@ class TaskViewSet(ViewSet,
 
     def get_queryset(self):
         qs = super().get_queryset()
-        if self.action in ['list']:
+        if self.action in ['list','top20']:
             qs.annotate(total_duration=(Sum('timelog_task__duration'))).order_by('-id')
             return qs
         return qs
@@ -47,6 +47,18 @@ class TaskViewSet(ViewSet,
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
+
+    @method_decorator(cache_page(CACHE_TTL))
+    @action(detail=False)
+    def top20(self, response, *args, **kwargs):
+        this_month = datetime.now().replace(day=1).date()
+        tasks = (self.get_queryset()
+                 .filter(timelog_task__started_at__gte=this_month)
+                 .filter(total_duration__isnull=False)
+                 .order_by('-total_duration')[:20]
+                 )
+        tasks_data = Top20Serializer(tasks, many=True).data
+        return Response(tasks_data)
 
     @action(detail=True, methods=['POST'], serializer_class=Serializer)
     def complete(self, request, *args, **kwargs):
@@ -109,7 +121,7 @@ class TimelogViewSet(ViewSet,
     def get_queryset(self):
         qs = super().get_queryset()
         if self.action in ['top20']:
-            qs.annotate(total_duration=(Sum('timelog_task__duration'))).order_by('-id')
+            qs.annotate(total_duration=(Sum('task__timelog__duration'))).order_by('-id')
             return qs
         return qs
 
@@ -127,18 +139,6 @@ class TimelogViewSet(ViewSet,
         total = tasks_by_user.aggregate(total=Sum('duration')).get('total') or 0
 
         return Response({'total_time': total})
-
-    @method_decorator(cache_page(CACHE_TTL))
-    @action(detail=False)
-    def top20(self, response, *args, **kwargs):
-        this_month = datetime.now().replace(day=1).date()
-        tasks = (self.get_queryset()
-                 .filter(timelog_task__started_at__gte=this_month)
-                 .filter(total_duration__isnull=False)
-                 .order_by('-total_duration')[:20]
-                 )
-        tasks_data = Top20Serializer(tasks, many=True).data
-        return Response(tasks_data)
 
 
 class TimerViewSet(ViewSet, GenericViewSet):
