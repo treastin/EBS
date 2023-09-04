@@ -2,7 +2,7 @@ import datetime
 
 from django.core.mail import send_mail
 from django.db import models
-from django.db.models.signals import pre_save
+from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
@@ -92,7 +92,7 @@ class Timer(models.Model):
             raise ValidationError({'detail': f'Task id:{self.id} has no ongoing timer.'})
 
 
-@receiver(pre_save, sender=Task)
+@receiver(post_save, sender=Task)
 def send_email(sender, instance, *args, **kwargs):
     if instance.status == 'completed':
         mail_subject = "You have task is now complete!"

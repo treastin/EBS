@@ -6,6 +6,8 @@
 *.sqlite3
 .coverage
 .gitignore
+.env_EXAMPLE
+
 
 
 ;;directories to ignore

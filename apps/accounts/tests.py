@@ -16,7 +16,7 @@ class TestUser(TransactionTestCase):
                                         last_name='For Testing',
                                         email='string@mail.ogg',
                                         password=make_password('StrongPassword'))
-        self.client.force_authenticate(user=self.user, token=f'Bearer {RefreshToken.for_user(self.user)}')
+        self.client.force_authenticate(user=self.user)
 
     def test_register(self):
         data = {
@@ -44,11 +44,11 @@ class TestUser(TransactionTestCase):
 
     def test_get_user(self):
         user = User.objects.create(first_name='User',
-                            last_name='For Testing',
-                            email='strings2@mail.ogg',
-                            password=make_password('StrongPassword'))
+                                   last_name='For Testing',
+                                   email='strings2@mail.ogg',
+                                   password=make_password('StrongPassword'))
 
-        url = reverse('user-detail', args=[user.id])
+        url = reverse('user-detail', kwargs={'pk': user.id})
         response_getuser = self.client.get(url)
 
         self.assertEqual(response_getuser.status_code, 200, "The endpoint did not return user{id:1}")

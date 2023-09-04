@@ -25,12 +25,11 @@ class Command(BaseCommand):
         if task_id:
             instances = []
             for i in range(total):
-                instances.extend([
+                instances.append(
                     TimeLog(task_id=random.choice(task_id),
                             user_id=random.choice(user_id),
-                            started_at=timezone.now() - timedelta(hours=i*2),
+                            started_at=timezone.now() - timedelta(hours=i * 2),
                             duration=timedelta(minutes=random.randint(2, 1000)),)
-                ]
                 )
             TimeLog.objects.bulk_create(instances, total)
         else:

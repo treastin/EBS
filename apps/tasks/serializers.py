@@ -4,18 +4,9 @@ from rest_framework import serializers
 
 
 class TaskSerializer(serializers.ModelSerializer):
-    total_duration = serializers.DurationField(default=timedelta(), read_only=True)
-
     class Meta:
         model = Task
-        fields = [
-            'id',
-            'description',
-            'status',
-            'assigned_to',
-            'created_by',
-            'total_duration',
-        ]
+        fields = '__all__'
 
         read_only_fields = [
             'id',
@@ -25,6 +16,24 @@ class TaskSerializer(serializers.ModelSerializer):
         write_only_fields = [
             'id',
             'assigned_to',
+        ]
+
+
+class TaskWithDurationSerializer(serializers.ModelSerializer):
+    total_duration = serializers.DurationField(default=timedelta(), read_only=True)
+
+    class Meta:
+        model = Task
+        fields = [
+            'id',
+            'title',
+            'total_duration',
+        ]
+        read_only_fields = [
+            'id',
+        ]
+        write_only_fields = [
+            'id',
         ]
 
 

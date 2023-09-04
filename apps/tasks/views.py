@@ -8,8 +8,8 @@ from rest_framework.viewsets import ViewSet, mixins, GenericViewSet
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
 from django.db.models import Sum
-from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone
+from django.shortcuts import get_object_or_404
 
 from datetime import timedelta, datetime
 
@@ -17,7 +17,7 @@ from config.settings import CACHE_TTL
 
 from apps.tasks.models import Task, Comment, TimeLog, Timer
 from apps.tasks.serializers import AssignSerializer, TimerSerializer, \
-    TaskSerializer, CommentSerializer, Top20Serializer, \
+    TaskSerializer,TaskWithDurationSerializer, CommentSerializer, Top20Serializer, \
     MyTaskSerializer, TimelogSerializer
 
 
@@ -33,6 +33,18 @@ class TaskViewSet(ViewSet,
     search_fields = ['title']
     filterset_fields = ('status', 'assigned_to')
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if self.action in ['list']:
+            qs.annotate(total_duration=(Sum('timelog_task__duration'))).order_by('-id')
+            return qs
+        return qs
+
+    def get_serializer_class(self):
+        if self.action in ['list']:
+            return TaskWithDurationSerializer
+        return TaskSerializer
+
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
 
@@ -46,14 +58,20 @@ class TaskViewSet(ViewSet,
 
     @action(detail=False, serializer_class=Serializer)
     def mytasks(self, request, *args, **kwargs):
-        queryset = self.queryset.filter(assigned_to=self.request.user)
+        queryset = self.get_queryset().filter(assigned_to=self.request.user)
+
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = MyTaskSerializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
         serializer = MyTaskSerializer(queryset, many=True)
         return Response(serializer.data)
 
     @action(detail=True, methods=['PATCH'], serializer_class=AssignSerializer)
-    def assign(self, request, *args, **kwargs):
-        instance = self.get_object()
-        serializer = self.get_serializer(data=self.request.data, instance=instance)
+    def assign(self, request, pk=None, *args, **kwargs):
+        instance = self.get_queryset().get(id=pk)
+        serializer = self.get_serializer(instance=instance, data=self.request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data)
@@ -67,6 +85,7 @@ class CommentViewSet(ViewSet,
     serializer_class = CommentSerializer
     permission_classes = (IsAuthenticated,)
     filterset_fields = ['task']
+    search_fields = ['text']
 
     def perform_create(self, serializer):
         send_mail(
@@ -87,6 +106,13 @@ class TimelogViewSet(ViewSet,
     permission_classes = (IsAuthenticated,)
     filterset_fields = ['task']
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if self.action in ['top20']:
+            qs.annotate(total_duration=(Sum('timelog_task__duration'))).order_by('-id')
+            return qs
+        return qs
+
     @action(detail=False)
     def mytime(self, request, *args, **kwargs):
         last_day_of_last_month = datetime.now().replace(day=1, hour=0, minute=0, second=0) - timedelta(seconds=1)
@@ -106,7 +132,7 @@ class TimelogViewSet(ViewSet,
     @action(detail=False)
     def top20(self, response, *args, **kwargs):
         this_month = datetime.now().replace(day=1).date()
-        tasks = (Task.objects.with_total_duration()
+        tasks = (self.get_queryset()
                  .filter(timelog_task__started_at__gte=this_month)
                  .filter(total_duration__isnull=False)
                  .order_by('-total_duration')[:20]
@@ -122,17 +148,13 @@ class TimerViewSet(ViewSet, GenericViewSet):
 
     @action(detail=True, methods=['POST'], serializer_class=Serializer)
     def start(self, request, pk=None, *args, **kwargs):
-        instance = self.queryset.get_or_create(user=self.request.user, task_id=pk)[0]
+        instance = self.get_queryset().get_or_create(user=self.request.user, task_id=pk)[0]
         instance.start()
-        return Response({})
+        return Response()
 
     @action(detail=True, methods=['POST'], serializer_class=Serializer)
     def stop(self, request, pk=None, *args, **kwargs):
-        try:
-            instance = self.queryset.get(user=self.request.user, task_id=pk)
-        except ObjectDoesNotExist:
-            return Response({'details': 'There is no ongoing timer.'}, status=400)
-
+        instance = get_object_or_404(self.get_queryset(), user=self.request.user, task_id=pk)
         difference = (timezone.now() - instance.started_at).total_seconds() // 60
         instance.stop()
         return Response(

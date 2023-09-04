@@ -18,16 +18,15 @@ class Command(BaseCommand):
     def handle(self, *args, **kwargs):
         fake = Faker()
         total = kwargs['instances']
-        task_id = list(Comment.objects.values_list('id', flat=True))
+        task_id = list(Task.objects.values_list('id', flat=True))
         if task_id:
             instances = []
-            for i in range(total):
-                instances.extend([
+            for _ in range(total):
+                instances.append(
                     Comment(task_id=random.choice(task_id),
                             text=fake.text())
-                ]
                 )
-            Task.objects.bulk_create(instances, total)
+            Comment.objects.bulk_create(instances, total)
         else:
             return self.stdout.write(self.style.ERROR(f'The database has no tasks to comment.'))
 

@@ -20,7 +20,7 @@ class TestTasks(TestCase):
                                         last_name='For Testing',
                                         email='string@mail.ogg',
                                         password='StrongPassword')
-        self.client.force_authenticate(user=self.user, token=f'Bearer {RefreshToken.for_user(self.user)}')
+        self.client.force_authenticate(user=self.user)
 
     def test_create_task(self):
         data = {
@@ -34,29 +34,29 @@ class TestTasks(TestCase):
         self.assertEqual(201, response.status_code)
 
     def test_get_tasks(self):
-        Task.objects.create(title='A interesting tile', description='', assigned_to_id=self.user.id)
+        Task.objects.create(title='A interesting tile', assigned_to_id=self.user.id)
 
         response = self.client.get(reverse('tasks-list'))
 
         self.assertEqual(200, response.status_code)
 
     def test_get_tasks_by_id(self):
-        Task.objects.create(id=5, title='A interesting tile', description='', assigned_to_id=self.user.id)
+        task = Task.objects.create(title='A interesting tile', assigned_to_id=self.user.id)
 
-        response = self.client.get(reverse('tasks-detail', kwargs={'pk': 5}))
+        response = self.client.get(reverse('tasks-detail', kwargs={'pk': task.id}))
 
         self.assertEqual(200, response.status_code)
 
     def test_my_tasks(self):
-        Task.objects.create(title='A interesting tile', description='', assigned_to_id=self.user.id)
+        Task.objects.create(title='A interesting tile', assigned_to_id=self.user.id)
 
         response = self.client.get(reverse('tasks-mytasks'))
 
         self.assertEqual(200, response.status_code)
 
     def test_completed_tasks(self):
-        Task.objects.create(title='A complete task', status='completed', description='', assigned_to_id=self.user.id)
-        Task.objects.create(title='Incomplete task', status='to_do', description='', assigned_to_id=self.user.id)
+        Task.objects.create(title='A complete task', status='completed', assigned_to_id=self.user.id)
+        Task.objects.create(title='Incomplete task', status='to_do', assigned_to_id=self.user.id)
 
         base_url = reverse('tasks-list')
         response = self.client.get(base_url + '?status=completed')
@@ -64,32 +64,32 @@ class TestTasks(TestCase):
         self.assertEqual(200, response.status_code)
 
     def test_assign_task(self):
-        Task.objects.create(id=3, title='Task to be assigned', description='', assigned_to_id=self.user.id)
-        User.objects.create(id=22, email='test@assign.com', password='DUMMYPASS')
+        task = Task.objects.create(title='Task to be assigned', assigned_to_id=self.user.id)
+        user = User.objects.create(email='test@assign.com')
 
         data = {
-            "assigned_to": 22
+            "assigned_to": user.id
         }
-        response = self.client.patch(reverse('tasks-assign', kwargs={'pk': 3}), data)
+        response = self.client.patch(reverse('tasks-assign', kwargs={'pk': task.id}), data)
 
         self.assertEqual(200, response.status_code)
 
     def test_complete_task(self):
-        Task.objects.create(id=6, title='Task to be completed', description='', assigned_to_id=self.user.id)
+        task = Task.objects.create(title='Task to be completed', assigned_to_id=self.user.id)
 
-        response = self.client.post(reverse('tasks-complete', kwargs={'pk': 6}))
+        response = self.client.post(reverse('tasks-complete', kwargs={'pk': task.id}))
 
         self.assertEqual(200, response.status_code)
 
     def test_remove_task(self):
-        Task.objects.create(id=2, title='Task to be deleted', description='', assigned_to_id=self.user.id)
+        task = Task.objects.create(title='Task to be deleted', assigned_to_id=self.user.id)
 
-        response = self.client.delete(reverse('tasks-detail', kwargs={'pk': 2}))
+        response = self.client.delete(reverse('tasks-detail', kwargs={'pk': task.id}))
 
         self.assertEqual(204, response.status_code)
 
     def test_search_task(self):
-        Task.objects.create(id=2, title='Task to be found.', description='', assigned_to_id=self.user.id)
+        Task.objects.create(title='Task to be found.', assigned_to_id=self.user.id)
 
         base_url = reverse('tasks-list')
         response = self.client.get(base_url + '?search=found')
@@ -102,8 +102,7 @@ class TestComments(TestCase):
         self.client = APIClient()
         self.user = User.objects.create(email='string@mail.ogg', password='StrongPassword')
         self.client.force_authenticate(user=self.user, token=f'Bearer {RefreshToken.for_user(self.user)}')
-        self.task = Task.objects.create(id=21, title='Task to be commented', description='',
-                                        assigned_to_id=self.user.id)
+        self.task = Task.objects.create(title='Task to be commented', assigned_to_id=self.user.id)
 
     def test_create_comment(self):
         data = {
@@ -132,7 +131,7 @@ class TestTimers(TestCase):
         self.client = APIClient()
         self.user = User.objects.create(email='string@mail.ogg', password='StrongPassword')
         self.client.force_authenticate(user=self.user, token=f'Bearer {RefreshToken.for_user(self.user)}')
-        self.task = Task.objects.create(title='Testing timers', description='', assigned_to_id=self.user.id)
+        self.task = Task.objects.create(title='Testing timers', assigned_to_id=self.user.id)
 
     def test_start_timer(self):
         response = self.client.post(reverse('timer-start', kwargs={'pk': self.task.id}))

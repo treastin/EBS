@@ -22,14 +22,13 @@ class Command(BaseCommand):
         statuses = ['to_do', 'in_progress', 'completed']
         if users_id:
             instances = []
-            for i in range(total):
-                instances.extend([
+            for _ in range(total):
+                instances.append(
                     Task(title=fake.name(),
                          description=fake.text(),
                          assigned_to_id=random.choice(users_id),
                          created_by_id=random.choice(users_id),
                          status=random.choice(statuses))
-                ]
                 )
             Task.objects.bulk_create(instances, total)
         else:
