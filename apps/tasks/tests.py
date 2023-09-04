@@ -21,6 +21,7 @@ class TestTasks(TestCase):
                                         email='string@mail.ogg',
                                         password='StrongPassword')
         self.client.force_authenticate(user=self.user)
+        self.task = Task.objects.create(title='Task to be used for testing.', assigned_to_id=self.user.id)
 
     def test_create_task(self):
         data = {
@@ -95,6 +96,20 @@ class TestTasks(TestCase):
         response = self.client.get(base_url + '?search=found')
 
         self.assertEqual(200, response.status_code)
+
+    def test_top20(self):
+        timelog = TimeLog.objects.create(
+            started_at=timezone.datetime(2023, 6, 22, 1, 22, 33),
+            duration=datetime.timedelta(days=33),
+            task_id=self.task.id,
+            user_id=self.user.id
+        )
+
+        response = self.client.get(reverse('tasks-top20'))
+
+        self.assertEqual(200, response.status_code)
+
+        self.assertEqual(f'Timelog of \"{self.task.title}\" id({timelog.id})', str(timelog))
 
 
 class TestComments(TestCase):
@@ -195,16 +210,4 @@ class TestTimers(TestCase):
 
         self.assertEqual(200, response.status_code)
 
-    def test_top20(self):
-        timelog = TimeLog.objects.create(
-            started_at=timezone.datetime(2023, 6, 22, 1, 22, 33),
-            duration=datetime.timedelta(days=33),
-            task_id=self.task.id,
-            user_id=self.user.id
-        )
 
-        response = self.client.get(reverse('timelog-top20'))
-
-        self.assertEqual(200, response.status_code)
-
-        self.assertEqual(f'Timelog of \"{self.task.title}\" id({timelog.id})', str(timelog))

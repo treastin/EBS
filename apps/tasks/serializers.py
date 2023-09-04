@@ -82,21 +82,6 @@ class TimeLogSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
-class Top20Serializer(serializers.ModelSerializer):
-    total_duration = serializers.DurationField(default=0, read_only=True)
-
-    class Meta:
-        model = Task
-        fields = [
-            'id',
-            'title',
-            'total_duration'
-        ]
-        read_only_fields = [
-            'id',
-        ]
-
-
 class TimelogSerializer(serializers.ModelSerializer):
     class Meta:
         model = TimeLog
@@ -112,3 +97,4 @@ class TimerSerializer(serializers.ModelSerializer):
     class Meta:
         model = Timer
         fields = '__all__'
+

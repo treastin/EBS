@@ -16,8 +16,8 @@ from datetime import timedelta, datetime
 from config.settings import CACHE_TTL
 
 from apps.tasks.models import Task, Comment, TimeLog, Timer
-from apps.tasks.serializers import AssignSerializer, TimerSerializer, \
-    TaskSerializer,TaskWithDurationSerializer, CommentSerializer, Top20Serializer, \
+from apps.tasks.serializers import AssignSerializer, \
+    TaskSerializer, TaskWithDurationSerializer, CommentSerializer,\
     MyTaskSerializer, TimelogSerializer
 
 
@@ -27,7 +27,7 @@ class TaskViewSet(ViewSet,
                   mixins.CreateModelMixin,
                   mixins.DestroyModelMixin,
                   GenericViewSet):
-    queryset = Task.objects.with_total_duration()
+    queryset = Task.objects.all()
     serializer_class = TaskSerializer
     permission_classes = (IsAuthenticated,)
     search_fields = ['title']
@@ -35,14 +35,17 @@ class TaskViewSet(ViewSet,
 
     def get_queryset(self):
         qs = super().get_queryset()
-        if self.action in ['list','top20']:
-            qs.annotate(total_duration=(Sum('timelog_task__duration'))).order_by('-id')
-            return qs
+        if self.action in ['list', 'top20']:
+            return qs.annotate(total_duration=(Sum('timelog_task__duration'))).order_by('-id')
+        if self.action in ['start', 'stop']:
+            return Timer.objects.all()
         return qs
 
     def get_serializer_class(self):
-        if self.action in ['list']:
+        if self.action in ['list', 'top20']:
             return TaskWithDurationSerializer
+        if self.action in ['start', 'stop']:
+            return None
         return TaskSerializer
 
     def perform_create(self, serializer):
@@ -57,7 +60,7 @@ class TaskViewSet(ViewSet,
                  .filter(total_duration__isnull=False)
                  .order_by('-total_duration')[:20]
                  )
-        tasks_data = Top20Serializer(tasks, many=True).data
+        tasks_data = self.get_serializer(tasks, many=True).data
         return Response(tasks_data)
 
     @action(detail=True, methods=['POST'], serializer_class=Serializer)
@@ -87,6 +90,20 @@ class TaskViewSet(ViewSet,
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data)
+
+    @action(detail=True, methods=['POST'], serializer_class=Serializer)
+    def start(self, request, pk=None, *args, **kwargs):
+        instance = self.get_queryset().get_or_create(user=self.request.user, task_id=pk)[0]
+        instance.start()
+        return Response()
+
+    @action(detail=True, methods=['POST'], serializer_class=Serializer)
+    def stop(self, request, pk=None, *args, **kwargs):
+        instance = get_object_or_404(self.get_queryset(), user=self.request.user, task_id=pk)
+        difference = (timezone.now() - instance.started_at).total_seconds() // 60
+        instance.stop()
+        return Response(
+            {'details': f'Current task had duration of : {int(difference)} min.'})
 
 
 class CommentViewSet(ViewSet,
@@ -139,23 +156,3 @@ class TimelogViewSet(ViewSet,
         total = tasks_by_user.aggregate(total=Sum('duration')).get('total') or 0
 
         return Response({'total_time': total})
-
-
-class TimerViewSet(ViewSet, GenericViewSet):
-    queryset = Timer.objects.all()
-    serializer_class = TimerSerializer
-    permission_classes = (IsAuthenticated,)
-
-    @action(detail=True, methods=['POST'], serializer_class=Serializer)
-    def start(self, request, pk=None, *args, **kwargs):
-        instance = self.get_queryset().get_or_create(user=self.request.user, task_id=pk)[0]
-        instance.start()
-        return Response()
-
-    @action(detail=True, methods=['POST'], serializer_class=Serializer)
-    def stop(self, request, pk=None, *args, **kwargs):
-        instance = get_object_or_404(self.get_queryset(), user=self.request.user, task_id=pk)
-        difference = (timezone.now() - instance.started_at).total_seconds() // 60
-        instance.stop()
-        return Response(
-            {'details': f'Current task had duration of : {int(difference)} min.'})
