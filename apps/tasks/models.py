@@ -19,8 +19,8 @@ class Task(models.Model):
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True)
     status = models.CharField(max_length=50, choices=Status.choices, default=Status.TODO)
-    assigned_to = models.ForeignKey(User, on_delete=models.CASCADE, related_name='assigns', null=True)
-    created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_tasks', null=True)
+    assigned_to = models.ForeignKey(User, on_delete=models.CASCADE, related_name='assigns')
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_tasks')
 
 
 class Comment(models.Model):
@@ -35,10 +35,10 @@ class Comment(models.Model):
 
 
 class TimeLog(models.Model):
-    task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name='timelog_task', null=True)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='timelog_user', null=True)
+    task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name='timelog_task')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='timelog_user')
     started_at = models.DateTimeField(default=timezone.now)
-    duration = models.DurationField(default=datetime.timedelta(), null=True)
+    duration = models.DurationField(default=datetime.timedelta())
 
     class Meta:
         ordering = ['-id']
@@ -66,39 +66,33 @@ class Timer(models.Model):
             self.save()
 
     def stop(self):
-        if self.is_started:
-            duration = timezone.now() - self.started_at
+        if not self.is_started:
+            raise ValidationError({'detail': f'Task id:{self.task.id} has no ongoing timer.'})
 
-            self.is_started = False
-            self.save()
+        duration = timezone.now() - self.started_at
 
-            timelog = TimeLog.objects.create(
-                user=self.user,
-                task=self.task,
-                started_at=self.started_at,
-                duration=duration
-            )
-            timelog.save()
-        else:
-            raise ValidationError({'detail': f'Task id:{self.id} has no ongoing timer.'})
+        self.is_started = False
+        self.save()
+
+        timelog = TimeLog.objects.create(
+            user=self.user,
+            task=self.task,
+            started_at=self.started_at,
+            duration=duration
+        )
+        return timelog
 
 
 @receiver(post_save, sender=Task)
-def send_email(sender, instance, *args, **kwargs):
-    if instance.status == 'completed':
-        mail_subject = "You have task is now complete!"
-        mail_message = f"The task \"{instance.title}\"!"
-    else:
+def send_email(sender, instance, created, *args, **kwargs):
+    if created:
         mail_subject = "You have ben assigned a new task!",
         mail_message = f"You have ben assigned a new task!\n The new task is \"{instance.title}\"."
-
-    try:
         send_mail(
             recipient_list=[instance.assigned_to.email],
             subject=mail_subject,
             message=mail_message,
-            from_email=None
+            from_email=None,
+            fail_silently=True,
         )
-    except:
-        return
 

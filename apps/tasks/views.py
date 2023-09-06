@@ -3,7 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.serializers import Serializer
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.viewsets import ViewSet, mixins, GenericViewSet
+from rest_framework.viewsets import ViewSet, mixins, GenericViewSet, ModelViewSet
 
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
@@ -16,17 +16,12 @@ from datetime import timedelta, datetime
 from config.settings import CACHE_TTL
 
 from apps.tasks.models import Task, Comment, TimeLog, Timer
-from apps.tasks.serializers import AssignSerializer, \
-    TaskSerializer, TaskWithDurationSerializer, CommentSerializer,\
-    MyTaskSerializer, TimelogSerializer
+from apps.tasks.serializers import (
+    TaskSerializer, TaskWithDurationSerializer, CommentSerializer,
+    MyTaskSerializer, TimelogSerializer, TimerSerializer)
 
 
-class TaskViewSet(ViewSet,
-                  mixins.ListModelMixin,
-                  mixins.RetrieveModelMixin,
-                  mixins.CreateModelMixin,
-                  mixins.DestroyModelMixin,
-                  GenericViewSet):
+class TaskViewSet(ModelViewSet):
     queryset = Task.objects.all()
     serializer_class = TaskSerializer
     permission_classes = (IsAuthenticated,)
@@ -37,22 +32,35 @@ class TaskViewSet(ViewSet,
         qs = super().get_queryset()
         if self.action in ['list', 'top20']:
             return qs.annotate(total_duration=(Sum('timelog_task__duration'))).order_by('-id')
-        if self.action in ['start', 'stop']:
-            return Timer.objects.all()
         return qs
 
     def get_serializer_class(self):
         if self.action in ['list', 'top20']:
             return TaskWithDurationSerializer
-        if self.action in ['start', 'stop']:
-            return None
         return TaskSerializer
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
 
+    def perform_update(self, serializer):
+        task_reassigned = False
+        assigned_to = serializer.validated_data.get('assigned_to')
+
+        if assigned_to and serializer.instance.assigned_to != assigned_to:
+            task_reassigned = True
+
+        serializer.save()
+
+        if task_reassigned:
+            send_mail(
+                recipient_list=[serializer.validated_data['assigned_to']],
+                subject="You have ben assigned a new task!",
+                message=f"You have ben assigned a new task!\n The new task is \"{serializer.instance.title}\".",
+                from_email=None,
+            )
+
     @method_decorator(cache_page(CACHE_TTL))
-    @action(detail=False)
+    @action(detail=False, methods=['GET'])
     def top20(self, response, *args, **kwargs):
         this_month = datetime.now().replace(day=1).date()
         tasks = (self.get_queryset()
@@ -63,15 +71,23 @@ class TaskViewSet(ViewSet,
         tasks_data = self.get_serializer(tasks, many=True).data
         return Response(tasks_data)
 
-    @action(detail=True, methods=['POST'], serializer_class=Serializer)
+    @action(detail=True, methods=['POST'])
     def complete(self, request, *args, **kwargs):
         instance = self.get_object()
-        instance.status = 'completed'
-        instance.save()
+        if instance.status != 'completed':
+            instance.status = 'completed'
+            instance.save()
+            send_mail(
+                recipient_list=[instance.assigned_to.email],
+                subject="Your task is now complete!",
+                message=f"The task \"{instance.title}\".",
+                from_email=None,
+                fail_silently=True,
+            )
         serializer = self.get_serializer(instance=instance)
         return Response(serializer.data)
 
-    @action(detail=False, serializer_class=Serializer)
+    @action(detail=False, methods=['GET'], serializer_class=Serializer)
     def mytasks(self, request, *args, **kwargs):
         queryset = self.get_queryset().filter(assigned_to=self.request.user)
 
@@ -83,27 +99,19 @@ class TaskViewSet(ViewSet,
         serializer = MyTaskSerializer(queryset, many=True)
         return Response(serializer.data)
 
-    @action(detail=True, methods=['PATCH'], serializer_class=AssignSerializer)
-    def assign(self, request, pk=None, *args, **kwargs):
-        instance = self.get_queryset().get(id=pk)
-        serializer = self.get_serializer(instance=instance, data=self.request.data, partial=True)
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
+    @action(detail=True, methods=['POST'], serializer_class=Serializer)
+    def start(self, request, pk=None, *args, **kwargs):
+        instance = Timer.objects.get_or_create(user=self.request.user, task_id=pk)[0]
+        instance.start()
+        serializer = TimerSerializer(instance)
         return Response(serializer.data)
 
     @action(detail=True, methods=['POST'], serializer_class=Serializer)
-    def start(self, request, pk=None, *args, **kwargs):
-        instance = self.get_queryset().get_or_create(user=self.request.user, task_id=pk)[0]
-        instance.start()
-        return Response()
-
-    @action(detail=True, methods=['POST'], serializer_class=Serializer)
     def stop(self, request, pk=None, *args, **kwargs):
-        instance = get_object_or_404(self.get_queryset(), user=self.request.user, task_id=pk)
-        difference = (timezone.now() - instance.started_at).total_seconds() // 60
-        instance.stop()
-        return Response(
-            {'details': f'Current task had duration of : {int(difference)} min.'})
+        instance = get_object_or_404(Timer.objects.all(), user=self.request.user, task_id=pk)
+        timelog = instance.stop()
+        serializer = TimelogSerializer(timelog)
+        return Response(serializer.data)
 
 
 class CommentViewSet(ViewSet,
@@ -135,14 +143,7 @@ class TimelogViewSet(ViewSet,
     permission_classes = (IsAuthenticated,)
     filterset_fields = ['task']
 
-    def get_queryset(self):
-        qs = super().get_queryset()
-        if self.action in ['top20']:
-            qs.annotate(total_duration=(Sum('task__timelog__duration'))).order_by('-id')
-            return qs
-        return qs
-
-    @action(detail=False)
+    @action(detail=False, methods=['GET'])
     def mytime(self, request, *args, **kwargs):
         last_day_of_last_month = datetime.now().replace(day=1, hour=0, minute=0, second=0) - timedelta(seconds=1)
         first_day_of_last_month = last_day_of_last_month.replace(day=1, hour=0, minute=0, second=0)

@@ -37,14 +37,6 @@ class TaskWithDurationSerializer(serializers.ModelSerializer):
         ]
 
 
-class AssignSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Task
-        fields = [
-            'assigned_to',
-        ]
-
-
 class MyTaskSerializer(serializers.ModelSerializer):
     class Meta:
         model = Task
@@ -65,21 +57,6 @@ class CommentSerializer(serializers.ModelSerializer):
             'task',
             'text',
         ]
-
-
-class StartTimerSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = TimeLog
-        fields = [
-            'id',
-            'task',
-        ]
-
-
-class TimeLogSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = TimeLog
-        fields = '__all__'
 
 
 class TimelogSerializer(serializers.ModelSerializer):

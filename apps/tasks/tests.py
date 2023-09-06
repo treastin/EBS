@@ -21,7 +21,7 @@ class TestTasks(TestCase):
                                         email='string@mail.ogg',
                                         password='StrongPassword')
         self.client.force_authenticate(user=self.user)
-        self.task = Task.objects.create(title='Task to be used for testing.', assigned_to_id=self.user.id)
+        self.task = Task.objects.create(title='Task to be used for testing.', assigned_to=self.user, created_by=self.user)
 
     def test_create_task(self):
         data = {
@@ -35,29 +35,29 @@ class TestTasks(TestCase):
         self.assertEqual(201, response.status_code)
 
     def test_get_tasks(self):
-        Task.objects.create(title='A interesting tile', assigned_to_id=self.user.id)
+        Task.objects.create(title='A interesting tile', assigned_to=self.user, created_by=self.user)
 
         response = self.client.get(reverse('tasks-list'))
 
         self.assertEqual(200, response.status_code)
 
     def test_get_tasks_by_id(self):
-        task = Task.objects.create(title='A interesting tile', assigned_to_id=self.user.id)
+        task = Task.objects.create(title='A interesting tile', assigned_to=self.user, created_by=self.user)
 
         response = self.client.get(reverse('tasks-detail', kwargs={'pk': task.id}))
 
         self.assertEqual(200, response.status_code)
 
     def test_my_tasks(self):
-        Task.objects.create(title='A interesting tile', assigned_to_id=self.user.id)
+        Task.objects.create(title='A interesting tile', assigned_to=self.user, created_by=self.user)
 
         response = self.client.get(reverse('tasks-mytasks'))
 
         self.assertEqual(200, response.status_code)
 
     def test_completed_tasks(self):
-        Task.objects.create(title='A complete task', status='completed', assigned_to_id=self.user.id)
-        Task.objects.create(title='Incomplete task', status='to_do', assigned_to_id=self.user.id)
+        Task.objects.create(title='A complete task', status='completed', assigned_to=self.user, created_by=self.user)
+        Task.objects.create(title='Incomplete task', status='to_do', assigned_to=self.user, created_by=self.user)
 
         base_url = reverse('tasks-list')
         response = self.client.get(base_url + '?status=completed')
@@ -65,32 +65,32 @@ class TestTasks(TestCase):
         self.assertEqual(200, response.status_code)
 
     def test_assign_task(self):
-        task = Task.objects.create(title='Task to be assigned', assigned_to_id=self.user.id)
+        task = Task.objects.create(title='Task to be assigned', assigned_to=self.user, created_by=self.user)
         user = User.objects.create(email='test@assign.com')
 
         data = {
             "assigned_to": user.id
         }
-        response = self.client.patch(reverse('tasks-assign', kwargs={'pk': task.id}), data)
+        response = self.client.patch(reverse('tasks-detail', kwargs={'pk': task.id}), data)
 
         self.assertEqual(200, response.status_code)
 
     def test_complete_task(self):
-        task = Task.objects.create(title='Task to be completed', assigned_to_id=self.user.id)
+        task = Task.objects.create(title='Task to be completed', assigned_to=self.user, created_by=self.user)
 
         response = self.client.post(reverse('tasks-complete', kwargs={'pk': task.id}))
 
         self.assertEqual(200, response.status_code)
 
     def test_remove_task(self):
-        task = Task.objects.create(title='Task to be deleted', assigned_to_id=self.user.id)
+        task = Task.objects.create(title='Task to be deleted', assigned_to=self.user, created_by=self.user)
 
         response = self.client.delete(reverse('tasks-detail', kwargs={'pk': task.id}))
 
         self.assertEqual(204, response.status_code)
 
     def test_search_task(self):
-        Task.objects.create(title='Task to be found.', assigned_to_id=self.user.id)
+        Task.objects.create(title='Task to be found.', assigned_to=self.user, created_by=self.user)
 
         base_url = reverse('tasks-list')
         response = self.client.get(base_url + '?search=found')
@@ -117,7 +117,7 @@ class TestComments(TestCase):
         self.client = APIClient()
         self.user = User.objects.create(email='string@mail.ogg', password='StrongPassword')
         self.client.force_authenticate(user=self.user, token=f'Bearer {RefreshToken.for_user(self.user)}')
-        self.task = Task.objects.create(title='Task to be commented', assigned_to_id=self.user.id)
+        self.task = Task.objects.create(title='Task to be commented', assigned_to=self.user, created_by=self.user)
 
     def test_create_comment(self):
         data = {
@@ -146,24 +146,24 @@ class TestTimers(TestCase):
         self.client = APIClient()
         self.user = User.objects.create(email='string@mail.ogg', password='StrongPassword')
         self.client.force_authenticate(user=self.user, token=f'Bearer {RefreshToken.for_user(self.user)}')
-        self.task = Task.objects.create(title='Testing timers', assigned_to_id=self.user.id)
+        self.task = Task.objects.create(title='Testing timers', assigned_to=self.user, created_by=self.user)
 
     def test_start_timer(self):
-        response = self.client.post(reverse('timer-start', kwargs={'pk': self.task.id}))
+        response = self.client.post(reverse('tasks-start', kwargs={'pk': self.task.id}))
 
         self.assertEqual(200, response.status_code)
 
     def test_stop_timer(self):
-        Timer.objects.create(task_id=self.task.id, user_id=self.user.id, is_started=True)
+        Timer.objects.create(task_id=self.task.id, user_id=self.user.id, is_started=True,)
 
-        response = self.client.post(reverse('timer-stop', kwargs={'pk': self.task.id}))
+        response = self.client.post(reverse('tasks-stop', kwargs={'pk': self.task.id}))
 
         self.assertEqual(200, response.status_code)
 
     def test_stop_stale_timer(self):
         Timer.objects.create(task_id=self.task.id, user_id=self.user.id, is_started=False)
 
-        response = self.client.post(reverse('timer-stop', kwargs={'pk': self.task.id}))
+        response = self.client.post(reverse('tasks-stop', kwargs={'pk': self.task.id}))
 
         self.assertEqual(400, response.status_code)
 
