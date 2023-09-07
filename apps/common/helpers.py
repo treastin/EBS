@@ -13,17 +13,3 @@ schema_view = get_schema_view(
     public=True,
     permission_classes=[AllowAny],
 )
-
-
-def send_mail(receivers, subject='Empty', message='Empty'):
-    try:
-        if receivers is None:
-            return
-
-        send_mail(
-            subject=subject,
-            message=message,
-            receivers=[*receivers],
-        )
-    except:
-        pass

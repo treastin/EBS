@@ -1,10 +1,9 @@
-from django.db.models import Sum
-from apps.tasks.models import Task, Comment, Timelog
+from datetime import timedelta
+from apps.tasks.models import Task, Comment, TimeLog, Timer
 from rest_framework import serializers
 
 
 class TaskSerializer(serializers.ModelSerializer):
-
     class Meta:
         model = Task
         fields = '__all__'
@@ -12,49 +11,30 @@ class TaskSerializer(serializers.ModelSerializer):
         read_only_fields = [
             'id',
             'created_by',
+
+        ]
+        write_only_fields = [
+            'id',
+            'assigned_to',
         ]
 
 
-class TaskListSerializer(serializers.Serializer):
-    time_passed = serializers.SerializerMethodField()
-
-    def get_time_passed(self, task):
-        time_passed = task.timelog_set.aggregate(total=Sum('duration')).get('total')
-        return time_passed or 0
+class TaskWithDurationSerializer(serializers.ModelSerializer):
+    total_duration = serializers.DurationField(default=timedelta(), read_only=True)
 
     class Meta:
         model = Task
         fields = [
             'id',
             'title',
-            'time_passed',
+            'total_duration',
         ]
         read_only_fields = [
             'id',
         ]
-
-
-class TaskUpdateSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Task
-        fields = '__all__'
-        read_only_fields = [
-            'created_by',
-            'status',
-            'assigned_to',
-        ]
-
-
-class TaskAssignSerializer(serializers.ModelSerializer):
-    id = serializers.IntegerField()
-    assigned_to = serializers.IntegerField()
-
-    class Meta:
-        model = Task
-        fields = (
+        write_only_fields = [
             'id',
-            'assigned_to'
-        )
+        ]
 
 
 class MyTaskSerializer(serializers.ModelSerializer):
@@ -79,54 +59,19 @@ class CommentSerializer(serializers.ModelSerializer):
         ]
 
 
-class SearchTaskSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Task
-        fields = [
-            'title'
-        ]
-
-
-class StartTimerSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Timelog
-        fields = [
-            'id',
-            'task',
-        ]
-
-
-class TimerSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Timelog
-        fields = '__all__'
-
-
-class Top20Serializer(serializers.ModelSerializer):
-    time_passed = serializers.SerializerMethodField()
-
-    def get_time_passed(self, task):
-        time_passed = task.timelog_set.aggregate(total=Sum('duration')).get('total')
-        return time_passed or 0
-
-    class Meta:
-        model = Task
-        fields = [
-            'id',
-            "title",
-            "time_passed",
-        ]
-        read_only_fields = [
-            'id',
-        ]
-
-
 class TimelogSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Timelog
+        model = TimeLog
         fields = '__all__'
         read_only_fields = [
             'created_by',
             'status',
             'assigned_to',
         ]
+
+
+class TimerSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Timer
+        fields = '__all__'
+

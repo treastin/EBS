@@ -1,177 +1,159 @@
-import http
-
+from django.core.mail import send_mail
 from rest_framework.decorators import action
 from rest_framework.serializers import Serializer
-from rest_framework.filters import SearchFilter
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.viewsets import ModelViewSet
+from rest_framework.viewsets import ViewSet, mixins, GenericViewSet, ModelViewSet
 
+from django.utils.decorators import method_decorator
+from django.views.decorators.cache import cache_page
 from django.db.models import Sum
-from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned
 from django.utils import timezone
+from django.shortcuts import get_object_or_404
 
 from datetime import timedelta, datetime
 
+from config.settings import CACHE_TTL
 
-from apps.common.helpers import send_mail
-from apps.tasks.models import Task, Comment, Timelog
-from apps.tasks.serializers import TaskListSerializer, TaskUpdateSerializer, \
-    TaskSerializer, TaskAssignSerializer, CommentSerializer, SearchTaskSerializer,\
-    Top20Serializer, MyTaskSerializer, TimelogSerializer
+from apps.tasks.models import Task, Comment, TimeLog, Timer
+from apps.tasks.serializers import (
+    TaskSerializer, TaskWithDurationSerializer, CommentSerializer,
+    MyTaskSerializer, TimelogSerializer, TimerSerializer)
 
 
 class TaskViewSet(ModelViewSet):
-    serializer_class = TaskListSerializer
     queryset = Task.objects.all()
+    serializer_class = TaskSerializer
     permission_classes = (IsAuthenticated,)
-    filter_backends = [SearchFilter]
-    search_fields = ['title',]
+    search_fields = ['title']
+    filterset_fields = ('status', 'assigned_to')
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if self.action in ['list', 'top20']:
+            return qs.annotate(total_duration=(Sum('timelog_task__duration'))).order_by('-id')
+        return qs
 
     def get_serializer_class(self):
-
-        if self.action in ['update', 'partial_update']:
-            return TaskUpdateSerializer
-
-        if self.action in ['mytask', 'completed', 'complete']:
-            return Serializer
-
-        if self.action in ['assign']:
-            return TaskAssignSerializer
-
-        if self.action in ['search']:
-            return SearchTaskSerializer
-
-        if self.action in ['list']:
-            return TaskListSerializer
-
+        if self.action in ['list', 'top20']:
+            return TaskWithDurationSerializer
         return TaskSerializer
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
 
-    @action(detail=True, methods=['POST'])
-    def complete(self, request, pk=None):
-        instance = self.get_object()
-        instance.status = 'completed'
-        instance.save()
-        send_mail(
-            receivers=instance.assigned_to.email,
-            subject="You have ben assigned a new task!",
-            message=f"You have ben assigned a new task!\n The new task is \"{instance.title}\".")
-        return Response(data={'details': 'Task completed'})
+    def perform_update(self, serializer):
+        task_reassigned = False
+        assigned_to = serializer.validated_data.get('assigned_to')
 
-    @action(detail=False, serializer_class=Serializer)
-    def mytasks(self, request):
-        mytasks = Task.objects.filter(assigned_to=self.request.user, )
-        mytasks_data = MyTaskSerializer(mytasks, many=True).data
-        return Response(data=mytasks_data)
+        if assigned_to and serializer.instance.assigned_to != assigned_to:
+            task_reassigned = True
 
-    @action(detail=False, serializer_class=Serializer)
-    def completed(self, request):
-        completed_tasks = Task.objects.filter(status='completed', )
-        completed_tasks_data = TaskSerializer(completed_tasks, many=True).data
-        return Response(completed_tasks_data)
-
-    @action(detail=False, methods=['PUT'],  serializer_class=TaskAssignSerializer)
-    def assign(self, request):
-        Task.objects.filter(pk=self.request.data['id']).update(assigned_to=self.request.data['assigned_to'])
-        task = Task.objects.get(pk=self.request.data['id'])
-        send_mail(
-            receivers=task.assigned_to.email,
-            subject="You have ben assigned a new task!",
-            message=f"You have ben assigned a new task!\n The new task is \"{task.title}\".")
-        return Response({}, status=http.HTTPStatus.OK)
-
-    @action(detail=True)
-    def timelog(self, request, pk=None):
-        tasks = TimelogSerializer(Timelog.objects.all().filter(task=pk), many=True)
-        return Response(data=tasks.data, status=http.HTTPStatus.OK)
-
-
-class CommentViewSet(ModelViewSet):
-    serializer_class = CommentSerializer
-    queryset = Comment.objects.all()
-    permission_classes = (IsAuthenticated,)
-
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
         serializer.save()
-        headers = self.get_success_headers(serializer.data)
-        task = Task.objects.get(pk=serializer.data['task'])
-        send_mail(
-            receivers=task.assigned_to.email,
-            subject='Your task got a new comment!',
-            message=f'The task \"{task.title}\" got a new comment :\n {serializer.data["text"]}'
-        )
-        return Response(serializer.data, status=201, headers=headers)
+
+        if task_reassigned:
+            send_mail(
+                recipient_list=[serializer.validated_data['assigned_to']],
+                subject="You have ben assigned a new task!",
+                message=f"You have ben assigned a new task!\n The new task is \"{serializer.instance.title}\".",
+                from_email=None,
+            )
+
+    @method_decorator(cache_page(CACHE_TTL))
+    @action(detail=False, methods=['GET'])
+    def top20(self, response, *args, **kwargs):
+        this_month = datetime.now().replace(day=1).date()
+        tasks = (self.get_queryset()
+                 .filter(timelog_task__started_at__gte=this_month)
+                 .filter(total_duration__isnull=False)
+                 .order_by('-total_duration')[:20]
+                 )
+        tasks_data = self.get_serializer(tasks, many=True).data
+        return Response(tasks_data)
+
+    @action(detail=True, methods=['POST'])
+    def complete(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if instance.status != 'completed':
+            instance.status = 'completed'
+            instance.save()
+            send_mail(
+                recipient_list=[instance.assigned_to.email],
+                subject="Your task is now complete!",
+                message=f"The task \"{instance.title}\".",
+                from_email=None,
+                fail_silently=True,
+            )
+        serializer = self.get_serializer(instance=instance)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['GET'], serializer_class=Serializer)
+    def mytasks(self, request, *args, **kwargs):
+        queryset = self.get_queryset().filter(assigned_to=self.request.user)
+
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = MyTaskSerializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = MyTaskSerializer(queryset, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['POST'], serializer_class=Serializer)
+    def start(self, request, pk=None, *args, **kwargs):
+        instance = Timer.objects.get_or_create(user=self.request.user, task_id=pk)[0]
+        instance.start()
+        serializer = TimerSerializer(instance)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['POST'], serializer_class=Serializer)
+    def stop(self, request, pk=None, *args, **kwargs):
+        instance = get_object_or_404(Timer.objects.all(), user=self.request.user, task_id=pk)
+        timelog = instance.stop()
+        serializer = TimelogSerializer(timelog)
+        return Response(serializer.data)
 
 
-class TimelogViewSet(ModelViewSet):
-    serializer_class = TimelogSerializer
-    queryset = Timelog.objects.all()
+class CommentViewSet(ViewSet,
+                     GenericViewSet,
+                     mixins.CreateModelMixin,
+                     mixins.ListModelMixin):
+    queryset = Comment.objects.all()
+    serializer_class = CommentSerializer
     permission_classes = (IsAuthenticated,)
+    filterset_fields = ['task']
+    search_fields = ['text']
 
-    def get_serializer_class(self):
+    def perform_create(self, serializer):
+        send_mail(
+            subject="Your task has a new comment.",
+            message=f"Hi, {self.request.user.first_name}.\n"
+                    f"The task {serializer.validated_data['task'].title} has a new comment.",
+            recipient_list=[*self.request.user.email],
+            from_email=None
+        )
 
-        if self.action in ['set']:
-            return TimelogSerializer
 
-        return TimelogSerializer
+class TimelogViewSet(ViewSet,
+                     GenericViewSet,
+                     mixins.ListModelMixin,
+                     mixins.CreateModelMixin):
+    queryset = TimeLog.objects.all()
+    serializer_class = TimelogSerializer
+    permission_classes = (IsAuthenticated,)
+    filterset_fields = ['task']
 
-    @action(detail=True, methods=['POST'])
-    def start(self, request, pk=None):
-        latest_timelog_exists = self.queryset.filter(task=pk, duration__isnull=True).exists()
+    @action(detail=False, methods=['GET'])
+    def mytime(self, request, *args, **kwargs):
+        last_day_of_last_month = datetime.now().replace(day=1, hour=0, minute=0, second=0) - timedelta(seconds=1)
+        first_day_of_last_month = last_day_of_last_month.replace(day=1, hour=0, minute=0, second=0)
 
-        if latest_timelog_exists:
-            return Response({'details': 'This task is currently ongoing. '}, status=http.HTTPStatus.BAD_REQUEST)
-        else:
-            Timelog.objects.create(task_id=pk).save()
-            return Response({'details': 'Timelog started.'}, status=http.HTTPStatus.CREATED)
+        tasks_by_user = TimeLog.objects.filter(
+            user=self.request.user,
+            started_at__gt=first_day_of_last_month,
+            started_at__lt=last_day_of_last_month
+        )
 
-    @action(detail=True, methods=['POST'])
-    def stop(self, request, pk=None):
-        latest_timelog_q = self.queryset.filter(task=pk, duration__isnull=True)
-
-        try:
-            latest_timelog = latest_timelog_q.get()
-        except MultipleObjectsReturned:
-            return Response({'details': 'The task has more than 1 ongoing timelog.'},
-                            status=http.HTTPStatus.MULTIPLE_CHOICES)
-
-        except ObjectDoesNotExist:
-            return Response({'details': 'The task has no ongoing timelog.'}, status=http.HTTPStatus.BAD_REQUEST)
-
-        duration = int((timezone.now() - latest_timelog.start).total_seconds() // 60)
-
-        latest_timelog_q.update(duration=duration)
-
-        return Response({'details': f'The duration of the task is {duration} minutes.'}, 200)
-
-    @action(detail=False)
-    def mytime(self, request):
-        last_day_of_last_month = datetime.now().replace(day=1) - timedelta(days=1)
-        first_day_of_last_month = last_day_of_last_month.replace(day=1)
-
-        tasks_by_user = (Task.objects.filter(
-            assigned_to=self.request.user,
-            timelog__start__gte=first_day_of_last_month,
-            timelog__start__lte=last_day_of_last_month
-        ))
-
-        total = tasks_by_user.aggregate(total=Sum('timelog__duration')).get('total')
+        total = tasks_by_user.aggregate(total=Sum('duration')).get('total') or 0
 
         return Response({'total_time': total})
-
-    @action(detail=False)
-    def top20(self, response):
-        last_day_of_last_month = datetime.now().replace(day=1) - timedelta(days=1)
-        tasks = (Task.objects
-                 .filter(timelog__start__gte=last_day_of_last_month)
-                 .annotate(time=Sum('timelog__duration'))
-                 .order_by('-time')
-                 )
-
-        tasks_data = Top20Serializer(tasks, many=True).data
-        return Response(tasks_data)
