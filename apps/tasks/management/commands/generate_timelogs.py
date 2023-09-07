@@ -17,10 +17,10 @@ class Command(BaseCommand):
         parser.add_argument('instances', type=int, help='Number of task instances to be created.')
 
     def handle(self, *args, **kwargs):
-        if not kwargs['instances']:
+        if not kwargs.get('instances') and kwargs.get('instances') > 0:
             return self.stdout.write((self.style.ERROR('Missing argument the "instances".')))
 
-        total = kwargs['instances']
+        total = kwargs.get('instances')
         task_id = list(Task.objects.values_list('id', flat=True))
         user_id = list(User.objects.values_list('id', flat=True))
         if not task_id:

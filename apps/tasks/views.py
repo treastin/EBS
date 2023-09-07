@@ -74,8 +74,8 @@ class TaskViewSet(ModelViewSet):
     @action(detail=True, methods=['POST'])
     def complete(self, request, *args, **kwargs):
         instance = self.get_object()
-        if instance.status != 'completed':
-            instance.status = 'completed'
+        if instance.status != Task.Status.COMPLETED:
+            instance.status = Task.Status.COMPLETED
             instance.save()
             send_mail(
                 recipient_list=[instance.assigned_to.email],
@@ -87,17 +87,6 @@ class TaskViewSet(ModelViewSet):
         serializer = self.get_serializer(instance=instance)
         return Response(serializer.data)
 
-    @action(detail=False, methods=['GET'], serializer_class=Serializer)
-    def mytasks(self, request, *args, **kwargs):
-        queryset = self.get_queryset().filter(assigned_to=self.request.user)
-
-        page = self.paginate_queryset(queryset)
-        if page is not None:
-            serializer = MyTaskSerializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
-
-        serializer = MyTaskSerializer(queryset, many=True)
-        return Response(serializer.data)
 
     @action(detail=True, methods=['POST'], serializer_class=Serializer)
     def start(self, request, pk=None, *args, **kwargs):
