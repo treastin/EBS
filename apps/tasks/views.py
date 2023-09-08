@@ -1,24 +1,27 @@
-from django.core.mail import send_mail
-from rest_framework.decorators import action
-from rest_framework.serializers import Serializer
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
-from rest_framework.viewsets import ViewSet, mixins, GenericViewSet, ModelViewSet
-
-from django.utils.decorators import method_decorator
-from django.views.decorators.cache import cache_page
-from django.db.models import Sum
-from django.utils import timezone
-from django.shortcuts import get_object_or_404
-
+import abc
 from datetime import timedelta, datetime
 
-from config.settings import CACHE_TTL
+from django.core.mail import send_mail
+from django.db.models import Sum
+from django.http import HttpResponse
+from django.shortcuts import get_object_or_404
+from django.utils.decorators import method_decorator
+from django.views.decorators.cache import cache_page
+from elasticsearch_dsl import Q
+from rest_framework.decorators import action
+from rest_framework.pagination import LimitOffsetPagination
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.serializers import Serializer
+from rest_framework.views import APIView
+from rest_framework.viewsets import ViewSet, mixins, GenericViewSet, ModelViewSet
 
+from apps.tasks.documents import TaskDocument
 from apps.tasks.models import Task, Comment, TimeLog, Timer
 from apps.tasks.serializers import (
     TaskSerializer, TaskWithDurationSerializer, CommentSerializer,
     MyTaskSerializer, TimelogSerializer, TimerSerializer)
+from config.settings import CACHE_TTL
 
 
 class TaskViewSet(ModelViewSet):
@@ -87,7 +90,6 @@ class TaskViewSet(ModelViewSet):
         serializer = self.get_serializer(instance=instance)
         return Response(serializer.data)
 
-
     @action(detail=True, methods=['POST'], serializer_class=Serializer)
     def start(self, request, pk=None, *args, **kwargs):
         instance = Timer.objects.get_or_create(user=self.request.user, task_id=pk)[0]
@@ -146,3 +148,36 @@ class TimelogViewSet(ViewSet,
         total = tasks_by_user.aggregate(total=Sum('duration')).get('total') or 0
 
         return Response({'total_time': total})
+
+
+class PaginatedElasticSearchAPIView(APIView, LimitOffsetPagination):
+    serializer_class = None
+    document_class = None
+
+    @abc.abstractmethod
+    def generate_q_expression(self, query):
+        """This method should be overridden
+        and return a Q() expression."""
+
+    def get(self, request, query):
+        try:
+            q = self.generate_q_expression(query)
+            search = self.document_class.search().query(q)
+            response = search.execute()
+            results = self.paginate_queryset(response, request, view=self)
+            serializer = self.serializer_class(results, many=True)
+            return self.get_paginated_response(serializer.data)
+        except Exception as e:
+            return HttpResponse(e, status=500)
+
+
+class SearchTasks(PaginatedElasticSearchAPIView):
+    serializer_class = MyTaskSerializer
+    document_class = TaskDocument
+    permission_classes = (IsAuthenticated,)
+
+    def generate_q_expression(self, query):
+        return Q('bool',
+                 should=[
+                     Q('match', title=query),
+                 ], minimum_should_match=1)

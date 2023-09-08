@@ -37,6 +37,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
 
+    'django_elasticsearch_dsl',
     'rest_framework_simplejwt',
     'rest_framework',
     'drf_yasg',
@@ -101,6 +102,13 @@ SWAGGER_SETTINGS = {
         }
     },
 }
+
+ELASTICSEARCH_DSL = {
+    'default': {
+        'hosts': os.getenv('ELASTIC_SEARCH')
+    },
+}
+
 
 WSGI_APPLICATION = 'config.wsgi.application'
 
