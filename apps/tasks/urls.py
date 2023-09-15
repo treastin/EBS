@@ -1,12 +1,12 @@
-from apps.tasks.views import TaskViewSet, CommentViewSet, TimelogViewSet, SearchTasks
+from apps.tasks.views import TaskViewSet, CommentViewSet, TimelogViewSet, ESPaginatedViewSet
 
 from rest_framework.routers import DefaultRouter
-from django.urls import path
+
 
 router = DefaultRouter()
 router.register('tasks', TaskViewSet, basename='tasks')
 router.register('comment', CommentViewSet, basename='comments')
 router.register('timelog', TimelogViewSet, basename='timelog')
-elasticsearch = path('search/<str:query>/', SearchTasks.as_view())
+
+router.register('es', ESPaginatedViewSet, basename='es')
 urlpatterns = router.urls
-urlpatterns.append(elasticsearch)

@@ -1,27 +1,37 @@
-import abc
 from datetime import timedelta, datetime
 
 from django.core.mail import send_mail
 from django.db.models import Sum
-from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
-from elasticsearch_dsl import Q
 from rest_framework.decorators import action
-from rest_framework.pagination import LimitOffsetPagination
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.serializers import Serializer
-from rest_framework.views import APIView
 from rest_framework.viewsets import ViewSet, mixins, GenericViewSet, ModelViewSet
-
+# Apps models and serializers
 from apps.tasks.documents import TaskDocument
 from apps.tasks.models import Task, Comment, TimeLog, Timer
 from apps.tasks.serializers import (
     TaskSerializer, TaskWithDurationSerializer, CommentSerializer,
-    MyTaskSerializer, TimelogSerializer, TimerSerializer)
+    TimelogSerializer, TimerSerializer, TaskDocumentSerializer)
 from config.settings import CACHE_TTL
+
+# Elasticsearch_dsl_drf
+from django_elasticsearch_dsl_drf.filter_backends import (
+    FilteringFilterBackend,
+    IdsFilterBackend,
+    OrderingFilterBackend,
+    DefaultOrderingFilterBackend,
+)
+from django_elasticsearch_dsl_drf.constants import (
+    LOOKUP_FILTER_RANGE, LOOKUP_QUERY_IN,
+    LOOKUP_QUERY_GT, LOOKUP_QUERY_GTE, LOOKUP_QUERY_LT, LOOKUP_QUERY_LTE,
+    STRING_LOOKUP_FILTERS,
+)
+from django_elasticsearch_dsl_drf.viewsets import BaseDocumentViewSet
 
 
 class TaskViewSet(ModelViewSet):
@@ -108,7 +118,8 @@ class TaskViewSet(ModelViewSet):
 class CommentViewSet(ViewSet,
                      GenericViewSet,
                      mixins.CreateModelMixin,
-                     mixins.ListModelMixin):
+                     mixins.ListModelMixin,
+                     mixins.DestroyModelMixin):
     queryset = Comment.objects.all()
     serializer_class = CommentSerializer
     permission_classes = (IsAuthenticated,)
@@ -120,9 +131,11 @@ class CommentViewSet(ViewSet,
             subject="Your task has a new comment.",
             message=f"Hi, {self.request.user.first_name}.\n"
                     f"The task {serializer.validated_data['task'].title} has a new comment.",
-            recipient_list=[*self.request.user.email],
-            from_email=None
+            recipient_list=[self.request.user.email],
+            from_email=None,
+            fail_silently=True
         )
+        serializer.save()
 
 
 class TimelogViewSet(ViewSet,
@@ -150,34 +163,51 @@ class TimelogViewSet(ViewSet,
         return Response({'total_time': total})
 
 
-class PaginatedElasticSearchAPIView(APIView, LimitOffsetPagination):
-    serializer_class = None
-    document_class = None
+class ESPaginatedViewSet(BaseDocumentViewSet):
+    document = TaskDocument
+    serializer_class = TaskDocumentSerializer
+    pagination_class = PageNumberPagination
+    lookup_field = 'id'
+    filter_backends = [
+        FilteringFilterBackend,
+        IdsFilterBackend,
+        OrderingFilterBackend,
+        DefaultOrderingFilterBackend,
+    ]
+    search_fields = (
+        'title',
+        'comment.text',
+    )
 
-    @abc.abstractmethod
-    def generate_q_expression(self, query):
-        """This method should be overridden
-        and return a Q() expression."""
+    filter_fields = {
+        'id': {
+            'field': 'id',
+            # Note, that we limit the lookups of id field in this example,
+            # to `range`, `in`, `gt`, `gte`, `lt` and `lte` filters.
+            'lookups': [
+                LOOKUP_FILTER_RANGE,
+                LOOKUP_QUERY_IN,
+                LOOKUP_QUERY_GT,
+                LOOKUP_QUERY_GTE,
+                LOOKUP_QUERY_LT,
+                LOOKUP_QUERY_LTE,
+            ],
+        },
+        'comment': {
+            'field': 'comment.text.raw',
+            'lookups': [
+                STRING_LOOKUP_FILTERS
+            ],
+        },
+        'title': {
+            'field': 'title',
+            'lookups': [
+                STRING_LOOKUP_FILTERS
+            ]
+        }
+    }
+    ordering_fields = {
+        'id': 'id'
+    }
+    ordering = ['-id']
 
-    def get(self, request, query):
-        try:
-            q = self.generate_q_expression(query)
-            search = self.document_class.search().query(q)
-            response = search.execute()
-            results = self.paginate_queryset(response, request, view=self)
-            serializer = self.serializer_class(results, many=True)
-            return self.get_paginated_response(serializer.data)
-        except Exception as e:
-            return HttpResponse(e, status=500)
-
-
-class SearchTasks(PaginatedElasticSearchAPIView):
-    serializer_class = MyTaskSerializer
-    document_class = TaskDocument
-    permission_classes = (IsAuthenticated,)
-
-    def generate_q_expression(self, query):
-        return Q('bool',
-                 should=[
-                     Q('match', title=query),
-                 ], minimum_should_match=1)

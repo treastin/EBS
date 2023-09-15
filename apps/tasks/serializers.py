@@ -1,6 +1,11 @@
 from datetime import timedelta
+
+from drf_util.serializers import PaginatorSerializer, ElasticFilterSerializer
+
 from apps.tasks.models import Task, Comment, TimeLog, Timer
+from apps.tasks.documents import TaskDocument
 from rest_framework import serializers
+from django_elasticsearch_dsl_drf.serializers import DocumentSerializer
 
 
 class TaskSerializer(serializers.ModelSerializer):
@@ -74,4 +79,46 @@ class TimerSerializer(serializers.ModelSerializer):
     class Meta:
         model = Timer
         fields = '__all__'
+
+
+class TaskDocumentSerializer(DocumentSerializer):
+    class Meta:
+        document = TaskDocument
+        fields = '__all__'
+
+
+class GlobalSearchFilterElasticSerializer(PaginatorSerializer, ElasticFilterSerializer):
+    search = serializers.CharField(required=False)
+    task_id = serializers.IntegerField(required=False)
+    task_name = serializers.CharField(required=False)
+    comments = serializers.PrimaryKeyRelatedField(queryset=Comment.objects.all(), required=False)
+    ordering = serializers.CharField(required=False)
+
+    class Meta:
+        model = Task
+        fields = [
+            'search',
+            'task_id',
+            'task_name',
+            'comments',
+            'ordering',
+        ]
+
+
+class CommentTextSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Comment
+        fields = ['text']
+
+
+class TasksDocumentSerializer(serializers.ModelSerializer):
+    comment = CommentSerializer()
+
+    class Meta:
+        model = Task
+        fields = [
+            'id',
+            'title',
+            'comment'
+        ]
 

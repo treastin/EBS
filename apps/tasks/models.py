@@ -24,7 +24,7 @@ class Task(models.Model):
 
 
 class Comment(models.Model):
-    task = models.ForeignKey(Task, on_delete=models.CASCADE)
+    task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name='comment')
     text = models.TextField()
 
     class Meta:
