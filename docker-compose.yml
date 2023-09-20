@@ -18,7 +18,7 @@ services:
     container_name: django
     env_file: .env
     ports:
-     - "8000:8000"
+      - "8000:8000"
     networks:
       django_net:
     working_dir: /app/

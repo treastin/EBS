@@ -5,6 +5,8 @@ from django.db.models import Sum
 from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
+from drf_util.decorators import serialize_decorator
+from drf_yasg.utils import swagger_auto_schema
 from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
@@ -13,10 +15,11 @@ from rest_framework.serializers import Serializer
 from rest_framework.viewsets import ViewSet, mixins, GenericViewSet, ModelViewSet
 # Apps models and serializers
 from apps.tasks.documents import TaskDocument
+from apps.tasks.elasticsearch import elastic
 from apps.tasks.models import Task, Comment, TimeLog, Timer
 from apps.tasks.serializers import (
     TaskSerializer, TaskWithDurationSerializer, CommentSerializer,
-    TimelogSerializer, TimerSerializer, TaskDocumentSerializer)
+    TimelogSerializer, TimerSerializer, TaskDocumentSerializer, SearchFilterElasticSerializer)
 from config.settings import CACHE_TTL
 
 # Elasticsearch_dsl_drf
@@ -194,7 +197,7 @@ class ESPaginatedViewSet(BaseDocumentViewSet):
             ],
         },
         'comment': {
-            'field': 'comment.text.raw',
+            'field': 'comment.text',
             'lookups': [
                 STRING_LOOKUP_FILTERS
             ],
@@ -210,4 +213,26 @@ class ESPaginatedViewSet(BaseDocumentViewSet):
         'id': 'id'
     }
     ordering = ['-id']
+
+
+class TaskSearchViewSet(ViewSet, GenericViewSet):
+    serializer_class = SearchFilterElasticSerializer
+    pagination_class = None
+    filter_backends = ()
+    serializer_query_class = SearchFilterElasticSerializer
+
+    @swagger_auto_schema(query_serializer=SearchFilterElasticSerializer) # noqa
+    @serialize_decorator(SearchFilterElasticSerializer)
+    def list(self, request, *args, **kwargs):
+        if ordering := request.valid.get('ordering'):
+            request.serializer.set_ordering(ordering)
+
+        data = elastic.search_response(
+            request.serializer,
+            None,
+        )
+        data['results'] = data.pop('data')
+        return Response(data)
+
+
 

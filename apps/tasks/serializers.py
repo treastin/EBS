@@ -7,6 +7,9 @@ from apps.tasks.documents import TaskDocument
 from rest_framework import serializers
 from django_elasticsearch_dsl_drf.serializers import DocumentSerializer
 
+SEARCH_FIELDS = ['title', 'comment.text']
+
+
 
 class TaskSerializer(serializers.ModelSerializer):
     class Meta:
@@ -87,32 +90,14 @@ class TaskDocumentSerializer(DocumentSerializer):
         fields = '__all__'
 
 
-class GlobalSearchFilterElasticSerializer(PaginatorSerializer, ElasticFilterSerializer):
-    search = serializers.CharField(required=False)
-    task_id = serializers.IntegerField(required=False)
-    task_name = serializers.CharField(required=False)
-    comments = serializers.PrimaryKeyRelatedField(queryset=Comment.objects.all(), required=False)
-    ordering = serializers.CharField(required=False)
-
-    class Meta:
-        model = Task
-        fields = [
-            'search',
-            'task_id',
-            'task_name',
-            'comments',
-            'ordering',
-        ]
-
-
 class CommentTextSerializer(serializers.ModelSerializer):
     class Meta:
         model = Comment
         fields = ['text']
 
 
-class TasksDocumentSerializer(serializers.ModelSerializer):
-    comment = CommentSerializer()
+class TaskListDocumentSerializer(serializers.ModelSerializer):
+    comment = CommentSerializer(many=True)
 
     class Meta:
         model = Task
@@ -122,3 +107,63 @@ class TasksDocumentSerializer(serializers.ModelSerializer):
             'comment'
         ]
 
+
+class SearchFilterElasticSerializer(PaginatorSerializer, ElasticFilterSerializer):
+    search = serializers.CharField(required=False)
+    id = serializers.IntegerField(required=False)
+    title = serializers.CharField(required=False)
+    comments = serializers.CharField(required=False)
+
+    def get_filter(self):
+        fields = self.get_fields()
+        for field_name, field_instance in fields.items():
+            function_name = 'filter_' + field_name
+            if not hasattr(self, function_name) and field_name not in (*PaginatorSerializer().get_fields(), 'ordering'):
+                setattr(self, 'filter_' + field_name, self.make_function(field_name, field_instance))
+        return super().get_filter()
+
+    def make_function(self, field_name, field_instance): # noqa
+        if isinstance(field_instance, serializers.PrimaryKeyRelatedField):
+            field_name += '.id'
+            return lambda value: {'term': {field_name: value.id if '.id' in field_name else value}}
+
+    def set_ordering(self, value):
+        order = 'asc'
+        if value.startswith('-'):
+            value = value[1:]
+            order = 'desc'
+            self.sort_criteria = [{
+                value: order
+            }]
+
+    def filter_search(self, value): # noqa
+        return {
+            'multi_match': {
+                'query': value, 'fields': SEARCH_FIELDS
+            }
+        }
+
+    def filter_comments(self, value): # noqa
+        return {
+            'match': {
+                'comments.text': {
+                    'query': value
+                }
+            }
+        }
+
+    def filter_title(self, value): # noqa
+        return {
+            'match':
+                {
+                    'query': value, 'fields': 'title'
+                }
+        }
+
+    def filter_id(self, value): # noqa
+        return {
+            'match':
+                {
+                    'id': value
+                }
+        }

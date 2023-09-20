@@ -95,4 +95,3 @@ def send_email(sender, instance, created, *args, **kwargs):
             from_email=None,
             fail_silently=True,
         )
-
