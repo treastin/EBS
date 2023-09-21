@@ -218,6 +218,7 @@ class ESPaginatedViewSet(BaseDocumentViewSet):
 class TaskSearchViewSet(ViewSet, GenericViewSet):
     serializer_class = SearchFilterElasticSerializer
     pagination_class = None
+    authentication_classes = (IsAuthenticated,)
     filter_backends = ()
     serializer_query_class = SearchFilterElasticSerializer
 
