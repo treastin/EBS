@@ -10,7 +10,6 @@ from django_elasticsearch_dsl_drf.serializers import DocumentSerializer
 SEARCH_FIELDS = ['title', 'comment.text']
 
 
-
 class TaskSerializer(serializers.ModelSerializer):
     class Meta:
         model = Task
@@ -96,7 +95,7 @@ class CommentTextSerializer(serializers.ModelSerializer):
         fields = ['text']
 
 
-class TaskListDocumentSerializer(serializers.ModelSerializer):
+class TaskESSerializer(serializers.ModelSerializer):
     comment = CommentSerializer(many=True)
 
     class Meta:
@@ -154,16 +153,17 @@ class SearchFilterElasticSerializer(PaginatorSerializer, ElasticFilterSerializer
 
     def filter_title(self, value): # noqa
         return {
-            'match':
-                {
-                    'query': value, 'fields': 'title'
+            'match': {
+                'title': {
+                    'query': value
                 }
+            }
         }
 
     def filter_id(self, value): # noqa
         return {
-            'match':
-                {
-                    'id': value
-                }
+            'match': {
+                'id': value
+            }
         }
+

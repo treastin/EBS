@@ -2,7 +2,7 @@ from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 from apps.tasks.models import Comment, Task
 from apps.tasks.documents import TaskDocument
-from apps.tasks.serializers import TaskListDocumentSerializer
+from apps.tasks.serializers import TaskESSerializer
 
 from apps.tasks.elasticsearch import elastic
 
@@ -17,7 +17,7 @@ def update_document_dsl_drf(sender, **kwargs):
 @receiver(post_save, sender=Task)
 def update_document(sender, **kwargs):
     instance = kwargs.get('instance')
-    data = TaskListDocumentSerializer(instance).data
+    data = TaskESSerializer(instance).data
     elastic.add_document(elastic.index_prefix, data, '_doc', data.get('id'))
 
 
@@ -30,12 +30,12 @@ def update_document(sender, **kwargs):
 @receiver(post_save, sender=Comment)
 def update_document(sender, **kwargs):
     instance = kwargs.get('instance')
-    data = TaskListDocumentSerializer(instance.task).data
+    data = TaskESSerializer(instance.task).data
     elastic.add_document(elastic.index_prefix, data, '_doc', data.get('id'))
 
 
 @receiver(post_delete, sender=Comment)
 def update_document(sender, **kwargs):
     instance = kwargs.get('instance')
-    data = TaskListDocumentSerializer(instance.task).data
+    data = TaskESSerializer(instance.task).data
     elastic.add_document(elastic.index_prefix, data, '_doc', data.get('id'))

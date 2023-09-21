@@ -229,7 +229,8 @@ class TaskSearchViewSet(ViewSet, GenericViewSet):
 
         data = elastic.search_response(
             request.serializer,
-            None,
+            index=None,
+            doc_type=elastic.index_prefix
         )
         data['results'] = data.pop('data')
         return Response(data)
