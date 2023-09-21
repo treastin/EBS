@@ -44,18 +44,6 @@ class TaskWithDurationSerializer(serializers.ModelSerializer):
         ]
 
 
-class MyTaskSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Task
-        fields = [
-            'id',
-            'title',
-        ]
-        read_only_fields = [
-            'id',
-        ]
-
-
 class CommentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Comment
@@ -87,12 +75,6 @@ class TaskDocumentSerializer(DocumentSerializer):
     class Meta:
         document = TaskDocument
         fields = '__all__'
-
-
-class CommentTextSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Comment
-        fields = ['text']
 
 
 class TaskESSerializer(serializers.ModelSerializer):
