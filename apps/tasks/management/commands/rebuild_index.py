@@ -7,7 +7,7 @@ from elasticsearch import Elasticsearch
 
 
 class Command(BaseCommand):
-    help = 'Create random comments for all tasks in database.'
+    help = 'Synchronises ElasticSearch indexes.'
 
     def handle(self, *args, **kwargs):
         queryset = Task.objects.all()
