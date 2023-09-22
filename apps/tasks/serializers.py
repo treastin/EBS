@@ -78,7 +78,7 @@ class TaskDocumentSerializer(DocumentSerializer):
 
 
 class TaskESSerializer(serializers.ModelSerializer):
-    comment = CommentSerializer(many=True)
+    comment = CommentSerializer(many=True, read_only=True)
 
     class Meta:
         model = Task

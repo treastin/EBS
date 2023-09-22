@@ -1,16 +1,16 @@
 from django.core.management import BaseCommand
 from apps.tasks.elasticsearch import elastic
-from rest_framework.renderers import JSONRenderer
 from apps.tasks.models import Task
 from apps.tasks.serializers import TaskESSerializer
 from elasticsearch import Elasticsearch
+import json
 
 
 class Command(BaseCommand):
     help = 'Synchronises ElasticSearch indexes.'
 
     def handle(self, *args, **kwargs):
-        queryset = Task.objects.all()
+        queryset = Task.objects.prefetch_related('comment')
         es = Elasticsearch(hosts=elastic.hosts)
 
         self.stdout.write(f'Indexing {queryset.count()} tasks')
@@ -18,14 +18,15 @@ class Command(BaseCommand):
 
         item_count = 0
 
+        # tasks = TaskBuildIndexSerializer(queryset, many=True).data
+
         body = []
         for task in queryset:
 
             data = TaskESSerializer(task).data
 
             body.append({"index": {"_index": prefix, "_id": task.id}})
-            body.append(JSONRenderer().render(data).decode('utf-8'))
-
+            body.append(json.dumps(data))
             if item_count % 500 == 0:
                 es.bulk(body=body)
                 body.clear()

@@ -15,27 +15,27 @@ def update_document_dsl_drf(sender, **kwargs):
 
 
 @receiver(post_save, sender=Task)
-def update_document(sender, **kwargs):
+def task_post_save(sender, **kwargs):
     instance = kwargs.get('instance')
     data = TaskESSerializer(instance).data
     elastic.add_document(elastic.index_prefix, data, '_doc', data.get('id'))
 
 
 @receiver(post_delete, sender=Task)
-def update_document(sender, **kwargs):
+def task_post_delete(sender, **kwargs):
     instance = kwargs.get('instance')
     elastic.session.delete(elastic.index_prefix, instance.id)
 
 
 @receiver(post_save, sender=Comment)
-def update_document(sender, **kwargs):
+def comment_post_save(sender, **kwargs):
     instance = kwargs.get('instance')
     data = TaskESSerializer(instance.task).data
     elastic.add_document(elastic.index_prefix, data, '_doc', data.get('id'))
 
 
 @receiver(post_delete, sender=Comment)
-def update_document(sender, **kwargs):
+def comment_post_save(sender, **kwargs):
     instance = kwargs.get('instance')
     data = TaskESSerializer(instance.task).data
     elastic.add_document(elastic.index_prefix, data, '_doc', data.get('id'))
