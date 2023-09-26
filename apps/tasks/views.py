@@ -1,24 +1,40 @@
-from django.core.mail import send_mail
-from rest_framework.decorators import action
-from rest_framework.serializers import Serializer
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
-from rest_framework.viewsets import ViewSet, mixins, GenericViewSet, ModelViewSet
-
-from django.utils.decorators import method_decorator
-from django.views.decorators.cache import cache_page
-from django.db.models import Sum
-from django.utils import timezone
-from django.shortcuts import get_object_or_404
-
 from datetime import timedelta, datetime
 
-from config.settings import CACHE_TTL
-
+from django.core.mail import send_mail
+from django.db.models import Sum
+from django.shortcuts import get_object_or_404
+from django.utils.decorators import method_decorator
+from django.views.decorators.cache import cache_page
+from drf_util.decorators import serialize_decorator
+from drf_yasg.utils import swagger_auto_schema
+from rest_framework.decorators import action
+from rest_framework.pagination import PageNumberPagination
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.serializers import Serializer
+from rest_framework.viewsets import ViewSet, mixins, GenericViewSet, ModelViewSet
+# Apps models and serializers
+from apps.tasks.documents import TaskDocument
+from apps.tasks.elasticsearch import elastic
 from apps.tasks.models import Task, Comment, TimeLog, Timer
 from apps.tasks.serializers import (
     TaskSerializer, TaskWithDurationSerializer, CommentSerializer,
-    MyTaskSerializer, TimelogSerializer, TimerSerializer)
+    TimelogSerializer, TimerSerializer, TaskDocumentSerializer, SearchFilterElasticSerializer)
+from config.settings import CACHE_TTL
+
+# Elasticsearch_dsl_drf
+from django_elasticsearch_dsl_drf.filter_backends import (
+    FilteringFilterBackend,
+    IdsFilterBackend,
+    OrderingFilterBackend,
+    DefaultOrderingFilterBackend,
+)
+from django_elasticsearch_dsl_drf.constants import (
+    LOOKUP_FILTER_RANGE, LOOKUP_QUERY_IN,
+    LOOKUP_QUERY_GT, LOOKUP_QUERY_GTE, LOOKUP_QUERY_LT, LOOKUP_QUERY_LTE,
+    STRING_LOOKUP_FILTERS,
+)
+from django_elasticsearch_dsl_drf.viewsets import BaseDocumentViewSet
 
 
 class TaskViewSet(ModelViewSet):
@@ -87,7 +103,6 @@ class TaskViewSet(ModelViewSet):
         serializer = self.get_serializer(instance=instance)
         return Response(serializer.data)
 
-
     @action(detail=True, methods=['POST'], serializer_class=Serializer)
     def start(self, request, pk=None, *args, **kwargs):
         instance = Timer.objects.get_or_create(user=self.request.user, task_id=pk)[0]
@@ -106,7 +121,8 @@ class TaskViewSet(ModelViewSet):
 class CommentViewSet(ViewSet,
                      GenericViewSet,
                      mixins.CreateModelMixin,
-                     mixins.ListModelMixin):
+                     mixins.ListModelMixin,
+                     mixins.DestroyModelMixin):
     queryset = Comment.objects.all()
     serializer_class = CommentSerializer
     permission_classes = (IsAuthenticated,)
@@ -118,9 +134,11 @@ class CommentViewSet(ViewSet,
             subject="Your task has a new comment.",
             message=f"Hi, {self.request.user.first_name}.\n"
                     f"The task {serializer.validated_data['task'].title} has a new comment.",
-            recipient_list=[*self.request.user.email],
-            from_email=None
+            recipient_list=[self.request.user.email],
+            from_email=None,
+            fail_silently=True
         )
+        serializer.save()
 
 
 class TimelogViewSet(ViewSet,
@@ -146,3 +164,78 @@ class TimelogViewSet(ViewSet,
         total = tasks_by_user.aggregate(total=Sum('duration')).get('total') or 0
 
         return Response({'total_time': total})
+
+
+class ESPaginatedViewSet(BaseDocumentViewSet):
+    document = TaskDocument
+    serializer_class = TaskDocumentSerializer
+    permission_classes = (IsAuthenticated,)
+    pagination_class = PageNumberPagination
+    lookup_field = 'id'
+    filter_backends = [
+        FilteringFilterBackend,
+        IdsFilterBackend,
+        OrderingFilterBackend,
+        DefaultOrderingFilterBackend,
+    ]
+    search_fields = (
+        'title',
+        'comment.text',
+    )
+
+    filter_fields = {
+        'id': {
+            'field': 'id',
+            # Note, that we limit the lookups of id field in this example,
+            # to `range`, `in`, `gt`, `gte`, `lt` and `lte` filters.
+            'lookups': [
+                LOOKUP_FILTER_RANGE,
+                LOOKUP_QUERY_IN,
+                LOOKUP_QUERY_GT,
+                LOOKUP_QUERY_GTE,
+                LOOKUP_QUERY_LT,
+                LOOKUP_QUERY_LTE,
+            ],
+        },
+        'comment': {
+            'field': 'comment.text',
+            'lookups': [
+                STRING_LOOKUP_FILTERS
+            ],
+        },
+        'title': {
+            'field': 'title',
+            'lookups': [
+                STRING_LOOKUP_FILTERS
+            ]
+        }
+    }
+    ordering_fields = {
+        'id': 'id'
+    }
+    ordering = ['-id']
+
+
+class TaskSearchViewSet(ViewSet, GenericViewSet):
+    serializer_class = SearchFilterElasticSerializer
+    pagination_class = None
+    permission_classes = (IsAuthenticated,)
+    filter_backends = ()
+    serializer_query_class = SearchFilterElasticSerializer
+
+    @swagger_auto_schema(query_serializer=SearchFilterElasticSerializer) # noqa
+    @serialize_decorator(SearchFilterElasticSerializer)
+    def list(self, request, *args, **kwargs):
+        if ordering := request.valid.get('ordering'):
+            request.serializer.set_ordering(ordering)
+
+        data = elastic.search_response(
+            request.serializer,
+            index=None,
+            doc_type=elastic.index_prefix
+        )
+        data['results'] = data.pop('data')
+        return Response(data)
+
+
+

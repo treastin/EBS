@@ -18,12 +18,13 @@ services:
     container_name: django
     env_file: .env
     ports:
-     - "8000:8000"
+      - "8000:8000"
     networks:
       django_net:
     working_dir: /app/
     depends_on:
       - db
+      - search
 
   pghero:
     image: ankane/pghero
@@ -46,6 +47,37 @@ services:
       - "6379:6379"
     networks:
       django_net:
+
+  search:
+    image: elasticsearch:8.9.0
+    container_name: elasticsearch
+    depends_on:
+      - db
+    ports:
+      - "9200:9200"
+    mem_limit: 1GB
+    networks:
+      django_net:
+
+  celery:
+    build: .
+    container_name: celery
+    env_file: .env
+    command:
+      - celery
+      - -A
+      - config
+      - worker
+      - -B
+    ports:
+      - "25:25"
+    networks:
+      django_net:
+    working_dir: /app/
+    depends_on:
+      - db
+      - search
+      - web
 
 networks:
   django_net:

@@ -48,13 +48,6 @@ class TestTasks(TestCase):
 
         self.assertEqual(200, response.status_code)
 
-    def test_my_tasks(self):
-        Task.objects.create(title='A interesting tile', assigned_to=self.user, created_by=self.user)
-
-        response = self.client.get(reverse('tasks-mytasks'))
-
-        self.assertEqual(200, response.status_code)
-
     def test_completed_tasks(self):
         Task.objects.create(title='A complete task', status='completed', assigned_to=self.user, created_by=self.user)
         Task.objects.create(title='Incomplete task', status='to_do', assigned_to=self.user, created_by=self.user)

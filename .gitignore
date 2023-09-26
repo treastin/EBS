@@ -13,5 +13,8 @@ dev.env
 
 ;;directories to ignore
 .idea/
-htmlcov
+/htmlcov/
 /venv/
+*.bak
+*.dat
+*.dir
