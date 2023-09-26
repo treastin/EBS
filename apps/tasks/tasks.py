@@ -1,10 +1,12 @@
 from django.template.loader import render_to_string
 from apps.accounts.models import User
+from apps.tasks.models import Task
 from apps.tasks.serializers import UserTasksSerializer
 from celery import shared_task
 from django.core.mail import EmailMessage
 from config import settings
 from email.mime.text import MIMEText
+from django.db.models import Prefetch, Q
 
 
 def send_email_to_user(user):
@@ -22,12 +24,15 @@ def send_email_to_user(user):
 
 @shared_task(bind=True)
 def send_mail_func(self):
-    users = User.objects.prefetch_related('assigns')
+    users = (User.objects.filter(
+        Q(assigns__status='to_do') | Q(assigns__status='in_process')
+    ).distinct().prefetch_related(
+        Prefetch('assigns', Task.objects.exclude(status='completed')))
+    )
 
     users_tasks = UserTasksSerializer(users, many=True).data
 
     for user in users_tasks:
         send_email_to_user(user)
 
-    return "Success"
-
+    return f"Emails send to {len(users_tasks)} users"
