@@ -1,0 +1,7 @@
+Hello, for today you have some tasks to do:<br>
+The tasks are:<br>
+{% for task in assigns %}
+	{% if task.status != 'completed' %}
+		<a href="http://localhost:8000/tasks/{{ task.id }}/">{{ task.title }}</a><br>
+	{% endif %}
+{% endfor %}

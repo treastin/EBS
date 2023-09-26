@@ -17,16 +17,12 @@ class Command(BaseCommand):
         prefix = elastic.index_prefix
 
         item_count = 0
-
-        # tasks = TaskBuildIndexSerializer(queryset, many=True).data
-
         body = []
         for task in queryset:
-
             data = TaskESSerializer(task).data
-
             body.append({"index": {"_index": prefix, "_id": task.id}})
             body.append(json.dumps(data))
+
             if item_count % 500 == 0:
                 es.bulk(body=body)
                 body.clear()

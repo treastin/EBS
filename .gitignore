@@ -15,3 +15,6 @@ dev.env
 .idea/
 /htmlcov/
 /venv/
+*.bak
+*.dat
+*.dir

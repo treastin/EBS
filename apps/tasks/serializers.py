@@ -2,6 +2,7 @@ from datetime import timedelta
 
 from drf_util.serializers import PaginatorSerializer, ElasticFilterSerializer
 
+from apps.accounts.models import User
 from apps.tasks.models import Task, Comment, TimeLog, Timer
 from apps.tasks.documents import TaskDocument
 from rest_framework import serializers
@@ -86,6 +87,17 @@ class TaskESSerializer(serializers.ModelSerializer):
             'id',
             'title',
             'comment'
+        ]
+
+
+class UserTasksSerializer(serializers.ModelSerializer):
+    assigns = TaskSerializer(many=True)
+
+    class Meta:
+        model = User
+        fields = [
+            'email',
+            'assigns',
         ]
 
 

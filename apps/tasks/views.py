@@ -169,6 +169,7 @@ class TimelogViewSet(ViewSet,
 class ESPaginatedViewSet(BaseDocumentViewSet):
     document = TaskDocument
     serializer_class = TaskDocumentSerializer
+    permission_classes = (IsAuthenticated,)
     pagination_class = PageNumberPagination
     lookup_field = 'id'
     filter_backends = [
@@ -218,7 +219,7 @@ class ESPaginatedViewSet(BaseDocumentViewSet):
 class TaskSearchViewSet(ViewSet, GenericViewSet):
     serializer_class = SearchFilterElasticSerializer
     pagination_class = None
-    authentication_classes = (IsAuthenticated,)
+    permission_classes = (IsAuthenticated,)
     filter_backends = ()
     serializer_query_class = SearchFilterElasticSerializer
 
